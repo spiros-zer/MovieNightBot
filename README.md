@@ -4,6 +4,8 @@ A Discord bot for organizing movie night events: schedule a date/time, let
 members propose and vote on movies, and automatically announce the winner
 before the event starts.
 
+[Terms of Service](TERMS_OF_SERVICE.md) · [Privacy Policy](PRIVACY_POLICY.md)
+
 ## How it works
 
 1. Anyone can schedule a movie night with `/movienight schedule` (date, time,
