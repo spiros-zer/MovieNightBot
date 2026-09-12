@@ -8,7 +8,7 @@ export function createClient(service: MovieNightService): Client {
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   client.movieNightService = service;
 
-  client.once("ready", (readyClient) => {
+  client.once("clientReady", (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}`);
     // Only safe to fire missed/pending vote-close jobs once the client can actually
     // fetch channels and send messages — not right after construction or login().
