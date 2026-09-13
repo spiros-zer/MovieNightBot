@@ -1,15 +1,20 @@
 export type ParseResult = { ok: true; value: Date } | { ok: false; reason: string };
 
-const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DATE_RE = /^(\d{2})-(\d{2})$/;
 const TIME_RE = /^(\d{2}):(\d{2})$/;
 
-function isValidTimeZone(timeZone: string): boolean {
+export function isValidTimeZone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat(undefined, { timeZone });
     return true;
   } catch {
     return false;
   }
+}
+
+/** The calendar year "now" falls on as seen from `timeZone`, e.g. so a date near a year boundary resolves to the right year for that zone. */
+function currentYearInZone(now: Date, timeZone: string): number {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric" }).format(now));
 }
 
 /** Offset (ms) such that `zoneWallClockMs = utcMs + offset` for the instant `utcMs`. */
@@ -40,18 +45,20 @@ function getTimeZoneOffsetMs(utcMs: number, timeZone: string): number {
 }
 
 /**
- * Parses a "YYYY-MM-DD" date and "HH:MM" (24h) time, interpreted as wall-clock
- * time in `timeZone` (an IANA name, default "UTC"), into the UTC instant it refers to.
+ * Parses a "MM-DD" date (the current calendar year in `timeZone` is always assumed —
+ * scheduling a movie night more than a year out isn't supported) and "HH:MM" (24h)
+ * time, interpreted as wall-clock time in `timeZone` (an IANA name, default "UTC"),
+ * into the UTC instant it refers to.
  *
  * The zone offset is derived from a single approximation pass, so a wall-clock time
  * that falls inside a DST transition (a nonexistent "spring forward" time, or an
  * ambiguous "fall back" one) can resolve up to one hour off. Acceptable for scheduling
  * a movie night; not suitable if exact instants across a DST boundary ever matter.
  */
-export function parseEventDateTime(dateStr: string, timeStr: string, timeZone = "UTC"): ParseResult {
+export function parseEventDateTime(dateStr: string, timeStr: string, timeZone = "UTC", now: Date = new Date()): ParseResult {
   const dateMatch = DATE_RE.exec(dateStr.trim());
   if (!dateMatch) {
-    return { ok: false, reason: "Date must be in YYYY-MM-DD format, e.g. 2026-02-01." };
+    return { ok: false, reason: "Date must be in MM-DD format, e.g. 02-01 — this year is always assumed." };
   }
   const timeMatch = TIME_RE.exec(timeStr.trim());
   if (!timeMatch) {
@@ -61,9 +68,9 @@ export function parseEventDateTime(dateStr: string, timeStr: string, timeZone = 
     return { ok: false, reason: `Unrecognized time zone "${timeZone}". Use an IANA name like "Europe/Athens".` };
   }
 
-  const [, yearStr, monthStr, dayStr] = dateMatch;
+  const [, monthStr, dayStr] = dateMatch;
   const [, hourStr, minuteStr] = timeMatch;
-  const year = Number(yearStr);
+  const year = currentYearInZone(now, timeZone);
   const month = Number(monthStr);
   const day = Number(dayStr);
   const hour = Number(hourStr);

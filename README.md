@@ -8,8 +8,13 @@ before the event starts.
 
 ## How it works
 
-1. Anyone can schedule a movie night with `/movienight schedule` (date, time,
-   optional time zone and channel).
+1. Anyone can schedule a movie night with `/movienight schedule` (date as
+   `MM-DD` — the current year is always assumed — plus the time the movie
+   starts, and optionally a time zone and channel; the time zone defaults to
+   the server's configured default, see `/movienight config` below). If the
+   bot has the **Manage Events** permission, it also creates a Discord
+   scheduled event in the server's **Events** tab, so members see the day and
+   time without leaving Discord's native UI.
 2. Members propose movies with `/movienight propose` — the server admin
    controls how many proposals each person may submit (`/movienight config`).
 3. Members vote for one proposed movie with `/movienight vote` (one vote per
@@ -46,7 +51,10 @@ Fill in `.env`:
   `./data/movie-night.sqlite`).
 
 Invite the bot to your server with the `applications.commands` and `bot`
-scopes, and the "Send Messages" / "Use Slash Commands" permissions.
+scopes, and the "Send Messages" / "Use Slash Commands" permissions. Also grant
+"Manage Events" if you want scheduled movie nights to show up in the server's
+Events tab (optional — the bot still works without it, just without that
+calendar entry).
 
 Register the slash commands, then start the bot:
 
@@ -66,12 +74,12 @@ npm run dev
 
 | Command | Who | Description |
 |---|---|---|
-| `/movienight schedule date time [timezone] [channel]` | anyone | Schedules a movie night. |
+| `/movienight schedule date time [timezone] [channel]` | anyone | Schedules a movie night (`date` is `MM-DD`, current year assumed; `time` is when the movie starts). |
 | `/movienight propose event title` | anyone | Proposes a movie. |
 | `/movienight vote event movie` | anyone | Casts a single vote. |
 | `/movienight status event` | anyone | Shows live proposals and vote counts. |
 | `/movienight cancel event` | the event's creator | Cancels a movie night. |
-| `/movienight config [max-proposals] [close-before-minutes]` | Manage Server permission | Views/changes per-server rules. |
+| `/movienight config [max-proposals] [close-before-minutes] [timezone]` | Manage Server permission | Views/changes per-server rules, including the default time zone used when `schedule` omits one. |
 
 ## Development
 

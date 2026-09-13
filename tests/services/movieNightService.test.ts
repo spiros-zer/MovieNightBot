@@ -227,6 +227,47 @@ describe("automatic voting close", () => {
   });
 });
 
+describe("setDiscordEventId", () => {
+  it("persists the Discord scheduled event id and returns the updated event", () => {
+    const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
+    if (!eventResult.ok) throw new Error("expected success");
+
+    const updated = service.setDiscordEventId(eventResult.value.id, "discord-evt-1");
+    expect(updated?.discordEventId).toBe("discord-evt-1");
+    expect(service.getEvent(eventResult.value.id)?.discordEventId).toBe("discord-evt-1");
+  });
+
+  it("returns null for an unknown event", () => {
+    expect(service.setDiscordEventId("missing", "discord-evt-1")).toBeNull();
+  });
+});
+
+describe("getEventByDiscordEventId", () => {
+  it("finds the event by its associated Discord scheduled event id", () => {
+    const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
+    if (!eventResult.ok) throw new Error("expected success");
+    service.setDiscordEventId(eventResult.value.id, "discord-evt-1");
+
+    expect(service.getEventByDiscordEventId("discord-evt-1")?.id).toBe(eventResult.value.id);
+    expect(service.getEventByDiscordEventId("missing")).toBeNull();
+  });
+});
+
+describe("setAnnouncementMessageId", () => {
+  it("persists the announcement message id and returns the updated event", () => {
+    const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
+    if (!eventResult.ok) throw new Error("expected success");
+
+    const updated = service.setAnnouncementMessageId(eventResult.value.id, "message-1");
+    expect(updated?.announcementMessageId).toBe("message-1");
+    expect(service.getEvent(eventResult.value.id)?.announcementMessageId).toBe("message-1");
+  });
+
+  it("returns null for an unknown event", () => {
+    expect(service.setAnnouncementMessageId("missing", "message-1")).toBeNull();
+  });
+});
+
 describe("cancelEvent", () => {
   it("marks the event cancelled and cancels its scheduled job", () => {
     const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
@@ -279,6 +320,8 @@ describe("rehydrate", () => {
       votingCloseTime: new Date("2026-02-01T19:00:00.000Z"),
       status: "open",
       winningProposalId: null,
+      discordEventId: null,
+      announcementMessageId: null,
     });
     eventRepo.create({
       id: "evt-b",
@@ -289,6 +332,8 @@ describe("rehydrate", () => {
       votingCloseTime: new Date("2026-02-01T19:30:00.000Z"),
       status: "announced",
       winningProposalId: null,
+      discordEventId: null,
+      announcementMessageId: null,
     });
 
     service.rehydrate();

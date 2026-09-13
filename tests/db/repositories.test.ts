@@ -32,6 +32,8 @@ function makeEvent(overrides: Partial<MovieNightEvent> = {}): MovieNightEvent {
     votingCloseTime: new Date("2026-01-10T19:00:00.000Z"),
     status: "open",
     winningProposalId: null,
+    discordEventId: null,
+    announcementMessageId: null,
     ...overrides,
   };
 }
@@ -43,21 +45,28 @@ describe("GuildConfigRepository", () => {
       guildId: "guild-1",
       maxProposalsPerUser: 1,
       votingCloseMinutesBeforeEvent: 60,
+      defaultTimeZone: "UTC",
     });
   });
 
   it("persists an upserted config and returns it thereafter", () => {
-    guildConfigRepo.upsert({ guildId: "guild-1", maxProposalsPerUser: 3, votingCloseMinutesBeforeEvent: 30 });
+    guildConfigRepo.upsert({
+      guildId: "guild-1",
+      maxProposalsPerUser: 3,
+      votingCloseMinutesBeforeEvent: 30,
+      defaultTimeZone: "Europe/Athens",
+    });
     expect(guildConfigRepo.getOrDefault("guild-1")).toEqual({
       guildId: "guild-1",
       maxProposalsPerUser: 3,
       votingCloseMinutesBeforeEvent: 30,
+      defaultTimeZone: "Europe/Athens",
     });
   });
 
   it("overwrites an existing config on a second upsert", () => {
-    guildConfigRepo.upsert({ guildId: "guild-1", maxProposalsPerUser: 3, votingCloseMinutesBeforeEvent: 30 });
-    guildConfigRepo.upsert({ guildId: "guild-1", maxProposalsPerUser: 5, votingCloseMinutesBeforeEvent: 15 });
+    guildConfigRepo.upsert({ guildId: "guild-1", maxProposalsPerUser: 3, votingCloseMinutesBeforeEvent: 30, defaultTimeZone: "UTC" });
+    guildConfigRepo.upsert({ guildId: "guild-1", maxProposalsPerUser: 5, votingCloseMinutesBeforeEvent: 15, defaultTimeZone: "UTC" });
     expect(guildConfigRepo.getOrDefault("guild-1").maxProposalsPerUser).toBe(5);
   });
 });
@@ -105,6 +114,37 @@ describe("EventRepository", () => {
     const updated = eventRepo.getById(event.id);
     expect(updated?.status).toBe("announced");
     expect(updated?.winningProposalId).toBe("proposal-1");
+  });
+
+  it("sets and clears the associated Discord scheduled event id", () => {
+    const event = makeEvent();
+    eventRepo.create(event);
+
+    eventRepo.setDiscordEventId(event.id, "discord-evt-1");
+    expect(eventRepo.getById(event.id)?.discordEventId).toBe("discord-evt-1");
+
+    eventRepo.setDiscordEventId(event.id, null);
+    expect(eventRepo.getById(event.id)?.discordEventId).toBeNull();
+  });
+
+  it("looks up an event by its Discord scheduled event id", () => {
+    const event = makeEvent();
+    eventRepo.create(event);
+    eventRepo.setDiscordEventId(event.id, "discord-evt-1");
+
+    expect(eventRepo.getByDiscordEventId("discord-evt-1")?.id).toBe(event.id);
+    expect(eventRepo.getByDiscordEventId("missing")).toBeNull();
+  });
+
+  it("sets and clears the associated announcement message id", () => {
+    const event = makeEvent();
+    eventRepo.create(event);
+
+    eventRepo.setAnnouncementMessageId(event.id, "message-1");
+    expect(eventRepo.getById(event.id)?.announcementMessageId).toBe("message-1");
+
+    eventRepo.setAnnouncementMessageId(event.id, null);
+    expect(eventRepo.getById(event.id)?.announcementMessageId).toBeNull();
   });
 });
 

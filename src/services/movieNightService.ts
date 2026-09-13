@@ -60,7 +60,7 @@ export class MovieNightService {
 
   setGuildConfig(
     guildId: string,
-    updates: Partial<Pick<GuildConfig, "maxProposalsPerUser" | "votingCloseMinutesBeforeEvent">>,
+    updates: Partial<Pick<GuildConfig, "maxProposalsPerUser" | "votingCloseMinutesBeforeEvent" | "defaultTimeZone">>,
   ): GuildConfig {
     const current = this.guildConfigRepo.getOrDefault(guildId);
     const updated: GuildConfig = { ...current, ...updates };
@@ -97,6 +97,8 @@ export class MovieNightService {
       votingCloseTime,
       status: "open",
       winningProposalId: null,
+      discordEventId: null,
+      announcementMessageId: null,
     };
     this.eventRepo.create(event);
     this.scheduleClose(event);
@@ -105,6 +107,27 @@ export class MovieNightService {
 
   getEvent(eventId: string): MovieNightEvent | null {
     return this.eventRepo.getById(eventId);
+  }
+
+  /** Looks up a movie night by its associated Discord guild scheduled event id (Events tab). */
+  getEventByDiscordEventId(discordEventId: string): MovieNightEvent | null {
+    return this.eventRepo.getByDiscordEventId(discordEventId);
+  }
+
+  /** Records the id of the Discord guild scheduled event (Events tab) created for this movie night, if any. */
+  setDiscordEventId(eventId: string, discordEventId: string | null): MovieNightEvent | null {
+    const event = this.eventRepo.getById(eventId);
+    if (!event) return null;
+    this.eventRepo.setDiscordEventId(eventId, discordEventId);
+    return { ...event, discordEventId };
+  }
+
+  /** Records the id of the channel message announcing this movie night, so it can be deleted on cancellation. */
+  setAnnouncementMessageId(eventId: string, announcementMessageId: string | null): MovieNightEvent | null {
+    const event = this.eventRepo.getById(eventId);
+    if (!event) return null;
+    this.eventRepo.setAnnouncementMessageId(eventId, announcementMessageId);
+    return { ...event, announcementMessageId };
   }
 
   listOpenEvents(guildId: string): MovieNightEvent[] {

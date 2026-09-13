@@ -18,6 +18,8 @@ function basePayload(overrides: Partial<VotingClosedPayload> = {}): VotingClosed
       votingCloseTime: new Date("2026-02-01T19:00:00.000Z"),
       status: "announced",
       winningProposalId: null,
+      discordEventId: null,
+      announcementMessageId: null,
     },
     proposals: [],
     winner: null,

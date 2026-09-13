@@ -10,6 +10,8 @@ interface EventRow {
   voting_close_time: string;
   status: EventStatus;
   winning_proposal_id: string | null;
+  discord_event_id: string | null;
+  announcement_message_id: string | null;
 }
 
 function toDomain(row: EventRow): MovieNightEvent {
@@ -22,6 +24,8 @@ function toDomain(row: EventRow): MovieNightEvent {
     votingCloseTime: new Date(row.voting_close_time),
     status: row.status,
     winningProposalId: row.winning_proposal_id,
+    discordEventId: row.discord_event_id,
+    announcementMessageId: row.announcement_message_id,
   };
 }
 
@@ -31,8 +35,8 @@ export class EventRepository {
   create(event: MovieNightEvent): void {
     this.db
       .prepare(
-        `INSERT INTO events (id, guild_id, channel_id, creator_id, event_time, voting_close_time, status, winning_proposal_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO events (id, guild_id, channel_id, creator_id, event_time, voting_close_time, status, winning_proposal_id, discord_event_id, announcement_message_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         event.id,
@@ -43,11 +47,18 @@ export class EventRepository {
         event.votingCloseTime.toISOString(),
         event.status,
         event.winningProposalId,
+        event.discordEventId,
+        event.announcementMessageId,
       );
   }
 
   getById(id: string): MovieNightEvent | null {
     const row = this.db.prepare("SELECT * FROM events WHERE id = ?").get(id) as EventRow | undefined;
+    return row ? toDomain(row) : null;
+  }
+
+  getByDiscordEventId(discordEventId: string): MovieNightEvent | null {
+    const row = this.db.prepare("SELECT * FROM events WHERE discord_event_id = ?").get(discordEventId) as EventRow | undefined;
     return row ? toDomain(row) : null;
   }
 
@@ -67,5 +78,13 @@ export class EventRepository {
     this.db
       .prepare("UPDATE events SET status = ?, winning_proposal_id = ? WHERE id = ?")
       .run(status, winningProposalId, id);
+  }
+
+  setDiscordEventId(id: string, discordEventId: string | null): void {
+    this.db.prepare("UPDATE events SET discord_event_id = ? WHERE id = ?").run(discordEventId, id);
+  }
+
+  setAnnouncementMessageId(id: string, announcementMessageId: string | null): void {
+    this.db.prepare("UPDATE events SET announcement_message_id = ? WHERE id = ?").run(announcementMessageId, id);
   }
 }

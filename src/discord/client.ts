@@ -1,11 +1,14 @@
-import { Client, EmbedBuilder, GatewayIntentBits, TextChannel } from "discord.js";
+import { Client, EmbedBuilder, GatewayIntentBits, GuildScheduledEventStatus, TextChannel } from "discord.js";
 import "./types";
 import * as movienight from "./commands/movienight";
 import { buildAnnouncementEmbedData } from "./formatting";
+import { buildResultDescription } from "./scheduledEvent";
+import { PROPOSE_BUTTON_PREFIX, PROPOSE_MODAL_PREFIX } from "./proposeInteraction";
+import { deleteAnnouncementMessage } from "./announcementMessage";
 import type { MovieNightService, VotingClosedPayload } from "../services/movieNightService";
 
 export function createClient(service: MovieNightService): Client {
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildScheduledEvents] });
   client.movieNightService = service;
 
   client.once("clientReady", (readyClient) => {
@@ -21,6 +24,10 @@ export function createClient(service: MovieNightService): Client {
         await movienight.execute(interaction);
       } else if (interaction.isAutocomplete() && interaction.commandName === "movienight") {
         await movienight.autocomplete(interaction);
+      } else if (interaction.isButton() && interaction.customId.startsWith(PROPOSE_BUTTON_PREFIX)) {
+        await movienight.handleProposeButton(interaction);
+      } else if (interaction.isModalSubmit() && interaction.customId.startsWith(PROPOSE_MODAL_PREFIX)) {
+        await movienight.handleProposeModalSubmit(interaction);
       }
     } catch (error) {
       console.error("Error handling interaction:", error);
@@ -30,7 +37,37 @@ export function createClient(service: MovieNightService): Client {
     }
   });
 
+  // A movie night's Discord scheduled event can also be cancelled straight from the
+  // server's Events tab, bypassing `/movienight cancel` entirely — catch that here too,
+  // by whichever of these two gateway events Discord happens to fire for it.
+  client.on("guildScheduledEventDelete", (deletedEvent) => {
+    void handleNativeScheduledEventCancellation(client, service, deletedEvent.id);
+  });
+  client.on("guildScheduledEventUpdate", (_oldEvent, newEvent) => {
+    if (newEvent.status === GuildScheduledEventStatus.Canceled) {
+      void handleNativeScheduledEventCancellation(client, service, newEvent.id);
+    }
+  });
+
   return client;
+}
+
+async function handleNativeScheduledEventCancellation(
+  client: Client,
+  service: MovieNightService,
+  discordEventId: string,
+): Promise<void> {
+  const event = service.getEventByDiscordEventId(discordEventId);
+  if (!event || event.status !== "open") return;
+
+  const result = service.cancelEvent(event.id, event.creatorId);
+  if (!result.ok || !result.value.announcementMessageId) return;
+
+  try {
+    await deleteAnnouncementMessage(client, result.value.channelId, result.value.announcementMessageId);
+  } catch (error) {
+    console.error(`Failed to delete announcement message for natively-cancelled movie night ${event.id}:`, error);
+  }
 }
 
 export function announceWinner(client: Client, payload: VotingClosedPayload): void {
@@ -47,6 +84,15 @@ export function announceWinner(client: Client, payload: VotingClosedPayload): vo
         .setColor(0x5865f2);
 
       await channel.send({ embeds: [embed] });
+
+      if (payload.event.discordEventId) {
+        const channelName = "name" in channel ? channel.name : "the event channel";
+        await channel.guild.scheduledEvents
+          .edit(payload.event.discordEventId, {
+            description: buildResultDescription(channelName, payload.winner?.title ?? null),
+          })
+          .catch((error) => console.error(`Failed to update Discord scheduled event for event ${payload.event.id}:`, error));
+      }
     } catch (error) {
       console.error(`Failed to announce winner for event ${payload.event.id}:`, error);
     }

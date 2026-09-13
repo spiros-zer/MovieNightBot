@@ -4,12 +4,24 @@ import {
   PermissionFlagsBits,
   SlashCommandBuilder,
   type AutocompleteInteraction,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
+  type ModalSubmitInteraction,
 } from "discord.js";
 import "../types";
-import { parseEventDateTime } from "../dateTimeParsing";
+import { isValidTimeZone, parseEventDateTime } from "../dateTimeParsing";
 import { discordTimestamp } from "../formatting";
-import type { MovieNightService } from "../../services/movieNightService";
+import { buildScheduledEventOptions } from "../scheduledEvent";
+import { deleteAnnouncementMessage } from "../announcementMessage";
+import {
+  buildProposeButtonRow,
+  buildProposeModal,
+  parseProposeButtonId,
+  parseProposeModalId,
+  PROPOSE_MODAL_TITLE_INPUT_ID,
+} from "../proposeInteraction";
+import type { MovieNightService, ServiceResult } from "../../services/movieNightService";
+import type { MovieProposal } from "../../domain/types";
 
 export const data = new SlashCommandBuilder()
   .setName("movienight")
@@ -18,12 +30,14 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("schedule")
       .setDescription("Schedule a new movie night event.")
-      .addStringOption((opt) => opt.setName("date").setDescription("Date in YYYY-MM-DD format").setRequired(true))
-      .addStringOption((opt) => opt.setName("time").setDescription("24-hour time in HH:MM format").setRequired(true))
+      .addStringOption((opt) => opt.setName("date").setDescription("This year's date, in MM-DD format, e.g. 12-25").setRequired(true))
+      .addStringOption((opt) =>
+        opt.setName("time").setDescription("24-hour time the movie starts, in HH:MM format").setRequired(true),
+      )
       .addStringOption((opt) =>
         opt
           .setName("timezone")
-          .setDescription('IANA time zone, e.g. "Europe/Athens" (default: UTC)')
+          .setDescription('IANA time zone, e.g. "Europe/Athens" (default: this server\'s configured default)')
           .setRequired(false),
       )
       .addChannelOption((opt) =>
@@ -83,6 +97,12 @@ export const data = new SlashCommandBuilder()
           .setDescription("Minutes before the event when voting closes and the winner is announced")
           .setMinValue(1)
           .setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("timezone")
+          .setDescription('Default IANA time zone for scheduling, e.g. "Europe/Athens"')
+          .setRequired(false),
       ),
   );
 
@@ -132,7 +152,7 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 async function handleSchedule(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
   const date = interaction.options.getString("date", true);
   const time = interaction.options.getString("time", true);
-  const timezone = interaction.options.getString("timezone") ?? "UTC";
+  const timezone = interaction.options.getString("timezone") ?? service.getGuildConfig(interaction.guildId!).defaultTimeZone;
   const channel = interaction.options.getChannel("channel") ?? interaction.channel;
 
   if (!channel || !("send" in channel)) {
@@ -168,11 +188,36 @@ async function handleSchedule(interaction: ChatInputCommandInteraction, service:
     )
     .setColor(0x5865f2);
 
-  await channel.send({ embeds: [embed] });
+  const announcement = await channel.send({ embeds: [embed], components: [buildProposeButtonRow(event.id)] });
+  service.setAnnouncementMessageId(event.id, announcement.id);
+  try {
+    await announcement.pin();
+  } catch (error) {
+    console.error(`Failed to pin announcement message for movie night ${event.id}:`, error);
+  }
+
+  const channelName = "name" in channel && typeof channel.name === "string" ? channel.name : "the event channel";
+  let addedToEvents = false;
+  if (interaction.guild) {
+    try {
+      const scheduledEvent = await interaction.guild.scheduledEvents.create(buildScheduledEventOptions(event, channelName));
+      service.setDiscordEventId(event.id, scheduledEvent.id);
+      addedToEvents = true;
+    } catch (error) {
+      console.error(`Failed to create Discord scheduled event for movie night ${event.id}:`, error);
+    }
+  }
+
   await interaction.reply({
-    content: `✅ Movie night scheduled for ${discordTimestamp(event.eventTime)} in <#${channel.id}>.`,
+    content:
+      `✅ Movie night scheduled for ${discordTimestamp(event.eventTime)} in <#${channel.id}>.` +
+      (addedToEvents ? " It's also on this server's **Events** tab." : ""),
     ephemeral: true,
   });
+}
+
+function proposeReplyContent(result: ServiceResult<MovieProposal>): string {
+  return result.ok ? `🎬 Proposed **${result.value.title}** for this movie night!` : `❌ ${result.reason}`;
 }
 
 async function handlePropose(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
@@ -180,12 +225,25 @@ async function handlePropose(interaction: ChatInputCommandInteraction, service: 
   const title = interaction.options.getString("title", true);
 
   const result = service.proposeMovie({ eventId, userId: interaction.user.id, title });
-  if (!result.ok) {
-    await interaction.reply({ content: `❌ ${result.reason}`, ephemeral: true });
-    return;
-  }
+  await interaction.reply({ content: proposeReplyContent(result), ephemeral: true });
+}
 
-  await interaction.reply({ content: `🎬 Proposed **${result.value.title}** for this movie night!`, ephemeral: true });
+/** A user clicked the "Propose a Movie" button under a movie night announcement — open the title modal. */
+export async function handleProposeButton(interaction: ButtonInteraction): Promise<void> {
+  const eventId = parseProposeButtonId(interaction.customId);
+  if (!eventId) return;
+  await interaction.showModal(buildProposeModal(eventId));
+}
+
+/** A user submitted the propose modal's title field. */
+export async function handleProposeModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const service: MovieNightService = interaction.client.movieNightService;
+  const eventId = parseProposeModalId(interaction.customId);
+  if (!eventId) return;
+
+  const title = interaction.fields.getTextInputValue(PROPOSE_MODAL_TITLE_INPUT_ID);
+  const result = service.proposeMovie({ eventId, userId: interaction.user.id, title });
+  await interaction.reply({ content: proposeReplyContent(result), ephemeral: true });
 }
 
 async function handleVote(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
@@ -226,7 +284,10 @@ async function handleStatus(interaction: ChatInputCommandInteraction, service: M
     )
     .setColor(0x5865f2);
 
-  await interaction.reply({ embeds: [embed] });
+  await interaction.reply({
+    embeds: [embed],
+    components: event.status === "open" ? [buildProposeButtonRow(event.id)] : [],
+  });
 }
 
 async function handleCancel(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
@@ -236,6 +297,23 @@ async function handleCancel(interaction: ChatInputCommandInteraction, service: M
     await interaction.reply({ content: `❌ ${result.reason}`, ephemeral: true });
     return;
   }
+
+  if (result.value.discordEventId && interaction.guild) {
+    try {
+      await interaction.guild.scheduledEvents.delete(result.value.discordEventId);
+    } catch (error) {
+      console.error(`Failed to delete Discord scheduled event for cancelled movie night ${eventId}:`, error);
+    }
+  }
+
+  if (result.value.announcementMessageId) {
+    try {
+      await deleteAnnouncementMessage(interaction.client, result.value.channelId, result.value.announcementMessageId);
+    } catch (error) {
+      console.error(`Failed to delete announcement message for cancelled movie night ${eventId}:`, error);
+    }
+  }
+
   await interaction.reply({ content: "🚫 Movie night cancelled.", ephemeral: true });
 }
 
@@ -247,14 +325,24 @@ async function handleConfig(interaction: ChatInputCommandInteraction, service: M
 
   const maxProposals = interaction.options.getInteger("max-proposals");
   const closeBeforeMinutes = interaction.options.getInteger("close-before-minutes");
+  const timezone = interaction.options.getString("timezone");
 
-  if (maxProposals === null && closeBeforeMinutes === null) {
+  if (timezone !== null && !isValidTimeZone(timezone)) {
+    await interaction.reply({
+      content: `❌ Unrecognized time zone "${timezone}". Use an IANA name like "Europe/Athens".`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (maxProposals === null && closeBeforeMinutes === null && timezone === null) {
     const current = service.getGuildConfig(interaction.guildId!);
     await interaction.reply({
       content:
         `Current movie night settings:\n` +
         `• Max proposals per person: **${current.maxProposalsPerUser}**\n` +
-        `• Voting closes **${current.votingCloseMinutesBeforeEvent}** minute(s) before the event`,
+        `• Voting closes **${current.votingCloseMinutesBeforeEvent}** minute(s) before the event\n` +
+        `• Default time zone: **${current.defaultTimeZone}**`,
       ephemeral: true,
     });
     return;
@@ -263,13 +351,15 @@ async function handleConfig(interaction: ChatInputCommandInteraction, service: M
   const updated = service.setGuildConfig(interaction.guildId!, {
     ...(maxProposals !== null ? { maxProposalsPerUser: maxProposals } : {}),
     ...(closeBeforeMinutes !== null ? { votingCloseMinutesBeforeEvent: closeBeforeMinutes } : {}),
+    ...(timezone !== null ? { defaultTimeZone: timezone } : {}),
   });
 
   await interaction.reply({
     content:
       `✅ Updated movie night settings:\n` +
       `• Max proposals per person: **${updated.maxProposalsPerUser}**\n` +
-      `• Voting closes **${updated.votingCloseMinutesBeforeEvent}** minute(s) before the event`,
+      `• Voting closes **${updated.votingCloseMinutesBeforeEvent}** minute(s) before the event\n` +
+      `• Default time zone: **${updated.defaultTimeZone}**`,
     ephemeral: true,
   });
 }
