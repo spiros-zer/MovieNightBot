@@ -1,7 +1,7 @@
 import { Client, EmbedBuilder, GatewayIntentBits, GuildScheduledEventStatus, TextChannel } from "discord.js";
 import "./types";
 import * as movienight from "./commands/movienight";
-import { buildAnnouncementEmbedData } from "./formatting";
+import { buildAnnouncementEmbedData, channelDisplayName } from "./formatting";
 import { buildResultDescription } from "./scheduledEvent";
 import { PROPOSE_BUTTON_PREFIX, PROPOSE_MODAL_PREFIX } from "./proposeInteraction";
 import { deleteAnnouncementMessage } from "./announcementMessage";
@@ -61,12 +61,8 @@ async function handleNativeScheduledEventCancellation(
   if (!event || event.status !== "open") return;
 
   const result = service.cancelEvent(event.id, event.creatorId);
-  if (!result.ok || !result.value.announcementMessageId) return;
-
-  try {
-    await deleteAnnouncementMessage(client, result.value.channelId, result.value.announcementMessageId);
-  } catch (error) {
-    console.error(`Failed to delete announcement message for natively-cancelled movie night ${event.id}:`, error);
+  if (result.ok) {
+    await deleteAnnouncementMessage(client, result.value);
   }
 }
 
@@ -86,7 +82,7 @@ export function announceWinner(client: Client, payload: VotingClosedPayload): vo
       await channel.send({ embeds: [embed] });
 
       if (payload.event.discordEventId) {
-        const channelName = "name" in channel ? channel.name : "the event channel";
+        const channelName = channelDisplayName(channel);
         await channel.guild.scheduledEvents
           .edit(payload.event.discordEventId, {
             description: buildResultDescription(channelName, payload.winner?.title ?? null),

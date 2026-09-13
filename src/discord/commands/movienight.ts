@@ -10,7 +10,7 @@ import {
 } from "discord.js";
 import "../types";
 import { isValidTimeZone, parseEventDateTime } from "../dateTimeParsing";
-import { discordTimestamp } from "../formatting";
+import { channelDisplayName, discordTimestamp } from "../formatting";
 import { buildScheduledEventOptions } from "../scheduledEvent";
 import { deleteAnnouncementMessage } from "../announcementMessage";
 import {
@@ -196,7 +196,7 @@ async function handleSchedule(interaction: ChatInputCommandInteraction, service:
     console.error(`Failed to pin announcement message for movie night ${event.id}:`, error);
   }
 
-  const channelName = "name" in channel && typeof channel.name === "string" ? channel.name : "the event channel";
+  const channelName = channelDisplayName(channel);
   let addedToEvents = false;
   if (interaction.guild) {
     try {
@@ -306,13 +306,7 @@ async function handleCancel(interaction: ChatInputCommandInteraction, service: M
     }
   }
 
-  if (result.value.announcementMessageId) {
-    try {
-      await deleteAnnouncementMessage(interaction.client, result.value.channelId, result.value.announcementMessageId);
-    } catch (error) {
-      console.error(`Failed to delete announcement message for cancelled movie night ${eventId}:`, error);
-    }
-  }
+  await deleteAnnouncementMessage(interaction.client, result.value);
 
   await interaction.reply({ content: "🚫 Movie night cancelled.", ephemeral: true });
 }

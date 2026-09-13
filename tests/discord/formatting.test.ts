@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAnnouncementEmbedData, discordTimestamp } from "../../src/discord/formatting";
+import { buildAnnouncementEmbedData, channelDisplayName, discordTimestamp } from "../../src/discord/formatting";
 import type { MovieProposal } from "../../src/domain/types";
 import type { VotingClosedPayload } from "../../src/services/movieNightService";
 
@@ -38,6 +38,17 @@ describe("discordTimestamp", () => {
   it("supports an alternate style", () => {
     const date = new Date("2026-02-01T20:00:00.000Z");
     expect(discordTimestamp(date, "R")).toBe(`<t:${Math.floor(date.getTime() / 1000)}:R>`);
+  });
+});
+
+describe("channelDisplayName", () => {
+  it("returns the channel's name when it has one", () => {
+    expect(channelDisplayName({ id: "channel-1", name: "movie-night" })).toBe("movie-night");
+  });
+
+  it("falls back to a generic label for channel types without a name", () => {
+    expect(channelDisplayName({ id: "channel-1" })).toBe("the event channel");
+    expect(channelDisplayName({ id: "channel-1", name: undefined })).toBe("the event channel");
   });
 });
 

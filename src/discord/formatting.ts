@@ -5,6 +5,11 @@ export function discordTimestamp(date: Date, style: "F" | "f" | "D" | "d" | "R" 
   return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`;
 }
 
+/** A channel's display name, falling back to a generic label for channel types without one (e.g. DMs). */
+export function channelDisplayName(channel: { id: string; name?: unknown }): string {
+  return typeof channel.name === "string" ? channel.name : "the event channel";
+}
+
 export interface EmbedData {
   title: string;
   description: string;
