@@ -103,7 +103,24 @@ describe("proposeMovie", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.title).toBe("The Matrix");
+    expect(result.value.posterUrl).toBeNull();
+    expect(result.value.sourceUrl).toBeNull();
     expect(service.listProposals(event.id)).toHaveLength(1);
+  });
+
+  it("stores the poster and source URL resolved from a pasted movie link", () => {
+    const event = openEvent();
+    const result = service.proposeMovie({
+      eventId: event.id,
+      userId: "user-1",
+      title: "The Matrix (1999)",
+      posterUrl: "https://img.example.com/matrix.jpg",
+      sourceUrl: "https://www.imdb.com/title/tt0133093/",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.posterUrl).toBe("https://img.example.com/matrix.jpg");
+    expect(result.value.sourceUrl).toBe("https://www.imdb.com/title/tt0133093/");
   });
 
   it("enforces the guild's configured max proposals per user", () => {

@@ -7,6 +7,8 @@ interface ProposalRow {
   user_id: string;
   title: string;
   created_at: string;
+  poster_url: string | null;
+  source_url: string | null;
 }
 
 function toDomain(row: ProposalRow): MovieProposal {
@@ -16,6 +18,8 @@ function toDomain(row: ProposalRow): MovieProposal {
     userId: row.user_id,
     title: row.title,
     createdAt: new Date(row.created_at),
+    posterUrl: row.poster_url,
+    sourceUrl: row.source_url,
   };
 }
 
@@ -24,8 +28,18 @@ export class ProposalRepository {
 
   create(proposal: MovieProposal): void {
     this.db
-      .prepare("INSERT INTO proposals (id, event_id, user_id, title, created_at) VALUES (?, ?, ?, ?, ?)")
-      .run(proposal.id, proposal.eventId, proposal.userId, proposal.title, proposal.createdAt.toISOString());
+      .prepare(
+        "INSERT INTO proposals (id, event_id, user_id, title, created_at, poster_url, source_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        proposal.id,
+        proposal.eventId,
+        proposal.userId,
+        proposal.title,
+        proposal.createdAt.toISOString(),
+        proposal.posterUrl,
+        proposal.sourceUrl,
+      );
   }
 
   getById(id: string): MovieProposal | null {

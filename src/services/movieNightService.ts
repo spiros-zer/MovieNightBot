@@ -147,7 +147,13 @@ export class MovieNightService {
     return { event, proposals, counts: countVotes(proposals, votes) };
   }
 
-  proposeMovie(params: { eventId: string; userId: string; title: string }): ServiceResult<MovieProposal> {
+  proposeMovie(params: {
+    eventId: string;
+    userId: string;
+    title: string;
+    posterUrl?: string | null;
+    sourceUrl?: string | null;
+  }): ServiceResult<MovieProposal> {
     const event = this.eventRepo.getById(params.eventId);
     if (!event) return { ok: false, reason: "That movie night event doesn't exist." };
 
@@ -169,6 +175,8 @@ export class MovieNightService {
       userId: params.userId,
       title,
       createdAt: this.now(),
+      posterUrl: params.posterUrl ?? null,
+      sourceUrl: params.sourceUrl ?? null,
     };
     this.proposalRepo.create(proposal);
     return { ok: true, value: proposal };

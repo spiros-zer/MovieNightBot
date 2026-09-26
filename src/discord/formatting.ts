@@ -1,3 +1,4 @@
+import type { MovieNightEvent, MovieProposal } from "../domain/types";
 import type { VotingClosedPayload } from "../services/movieNightService";
 
 /** Discord's native timestamp markup — renders in each viewer's own local time/format. */
@@ -10,10 +11,28 @@ export function channelDisplayName(channel: { id: string; name?: unknown }): str
   return typeof channel.name === "string" ? channel.name : "the event channel";
 }
 
+/** Escapes characters that would let a movie title break out of `[text](url)` markdown-link syntax. */
+function escapeMarkdownLinkText(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/[[\]]/g, "\\$&");
+}
+
+/**
+ * A bolded movie title, as a clickable link to its source page (IMDb/Netflix/etc.) when one is
+ * known — so people can click through for the description, cast, etc. Only renders as a link
+ * inside embeds; Discord doesn't support masked links in plain message content.
+ */
+export function movieLink(title: string, sourceUrl: string | null): string {
+  if (!sourceUrl || sourceUrl.includes(")")) return `**${title}**`;
+  return `[**${escapeMarkdownLinkText(title)}**](${sourceUrl})`;
+}
+
 export interface EmbedData {
   title: string;
   description: string;
   fields: { name: string; value: string; inline?: boolean }[];
+  imageUrl?: string;
+  /** Makes the embed's own title clickable, taking viewers straight to the winning movie's page. */
+  url?: string;
 }
 
 export function buildAnnouncementEmbedData(payload: VotingClosedPayload): EmbedData {
@@ -33,7 +52,7 @@ export function buildAnnouncementEmbedData(payload: VotingClosedPayload): EmbedD
   const resultLines = ranked.map((p) => {
     const votes = counts.get(p.id) ?? 0;
     const marker = p.id === winner.id ? "🏆 " : "";
-    return `${marker}**${p.title}** — ${votes} vote${votes === 1 ? "" : "s"}`;
+    return `${marker}${movieLink(p.title, p.sourceUrl)} — ${votes} vote${votes === 1 ? "" : "s"}`;
   });
 
   const description =
@@ -44,6 +63,73 @@ export function buildAnnouncementEmbedData(payload: VotingClosedPayload): EmbedD
   return {
     title: `🎬 Movie night winner: ${winner.title}`,
     description,
-    fields: [{ name: "Winner", value: `**${winner.title}** — ${maxVotes} vote${maxVotes === 1 ? "" : "s"}` }],
+    fields: [{ name: "Winner", value: `${movieLink(winner.title, winner.sourceUrl)} — ${maxVotes} vote${maxVotes === 1 ? "" : "s"}` }],
+    ...(winner.posterUrl ? { imageUrl: winner.posterUrl } : {}),
+    ...(winner.sourceUrl ? { url: winner.sourceUrl } : {}),
   };
+}
+
+/** A single proposed movie, rendered as its own small embed (title + vote count, poster as thumbnail, clickable if linked). */
+export interface MovieRowEmbed {
+  title: string;
+  description: string;
+  url?: string;
+  imageUrl?: string;
+}
+
+export interface MovieNightMessageData {
+  header: EmbedData;
+  movieEmbeds: MovieRowEmbed[];
+}
+
+/** Discord allows at most 10 embeds per message; one is the header, leaving this many for movies. */
+export const MAX_MOVIE_ROW_EMBEDS = 9;
+
+/**
+ * Renders the single live status embed set for a movie night: a header (who scheduled it, when,
+ * open/closed, voting deadline) followed by one small embed per proposed movie with its own
+ * poster thumbnail and vote count. This is sent once and then edited in place as proposals and
+ * votes come in, rather than posting a new message each time.
+ */
+export function buildMovieNightMessageData(
+  event: MovieNightEvent,
+  proposals: MovieProposal[],
+  counts: Map<string, number>,
+): MovieNightMessageData {
+  const isOpen = event.status === "open";
+  const ranked = [...proposals].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
+  const shown = ranked.slice(0, MAX_MOVIE_ROW_EMBEDS);
+  const overflow = ranked.slice(MAX_MOVIE_ROW_EMBEDS);
+
+  const headerLines = [
+    `Event: ${discordTimestamp(event.eventTime)}`,
+    `Status: **${isOpen ? "open" : "closed"}**`,
+    `Voting closes: ${isOpen ? `${discordTimestamp(event.votingCloseTime)} (${discordTimestamp(event.votingCloseTime, "R")})` : "closed"}`,
+  ];
+
+  if (ranked.length === 0) {
+    headerLines.push("", "_No movies proposed yet._");
+  } else if (overflow.length > 0) {
+    const overflowList = overflow.map((p) => movieLink(p.title, p.sourceUrl)).join(", ");
+    headerLines.push("", `_+${overflow.length} more: ${overflowList}_`);
+  }
+
+  const header: EmbedData = {
+    title: "🎬 Movie Night",
+    description: headerLines.join("\n"),
+    fields: [{ name: "Scheduled by", value: `<@${event.creatorId}>`, inline: true }],
+  };
+
+  const movieEmbeds: MovieRowEmbed[] = shown.map((p) => {
+    const votes = counts.get(p.id) ?? 0;
+    const isWinner = p.id === event.winningProposalId;
+    return {
+      title: `${isWinner ? "🏆 " : ""}${p.title}`,
+      description: `${votes} vote${votes === 1 ? "" : "s"}`,
+      ...(p.sourceUrl ? { url: p.sourceUrl } : {}),
+      ...(p.posterUrl ? { imageUrl: p.posterUrl } : {}),
+    };
+  });
+
+  return { header, movieEmbeds };
 }

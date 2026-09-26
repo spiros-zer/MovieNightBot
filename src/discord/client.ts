@@ -4,7 +4,7 @@ import * as movienight from "./commands/movienight";
 import { buildAnnouncementEmbedData, channelDisplayName } from "./formatting";
 import { buildResultDescription } from "./scheduledEvent";
 import { PROPOSE_BUTTON_PREFIX, PROPOSE_MODAL_PREFIX } from "./proposeInteraction";
-import { deleteAnnouncementMessage } from "./announcementMessage";
+import { deleteAnnouncementMessage, refreshAnnouncementMessage } from "./announcementMessage";
 import type { MovieNightService, VotingClosedPayload } from "../services/movieNightService";
 
 export function createClient(service: MovieNightService): Client {
@@ -66,7 +66,7 @@ async function handleNativeScheduledEventCancellation(
   }
 }
 
-export function announceWinner(client: Client, payload: VotingClosedPayload): void {
+export function announceWinner(client: Client, service: MovieNightService, payload: VotingClosedPayload): void {
   void (async () => {
     try {
       const channel = await client.channels.fetch(payload.event.channelId);
@@ -78,8 +78,15 @@ export function announceWinner(client: Client, payload: VotingClosedPayload): vo
         .setDescription(embedData.description)
         .addFields(embedData.fields)
         .setColor(0x5865f2);
+      if (embedData.imageUrl) {
+        embed.setImage(embedData.imageUrl);
+      }
+      if (embedData.url) {
+        embed.setURL(embedData.url);
+      }
 
       await channel.send({ embeds: [embed] });
+      await refreshAnnouncementMessage(client, service, payload.event.id);
 
       if (payload.event.discordEventId) {
         const channelName = channelDisplayName(channel);

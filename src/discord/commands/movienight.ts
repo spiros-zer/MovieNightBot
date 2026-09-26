@@ -10,9 +10,9 @@ import {
 } from "discord.js";
 import "../types";
 import { isValidTimeZone, parseEventDateTime } from "../dateTimeParsing";
-import { channelDisplayName, discordTimestamp } from "../formatting";
+import { buildMovieNightMessageData, channelDisplayName, discordTimestamp, movieLink } from "../formatting";
 import { buildScheduledEventOptions } from "../scheduledEvent";
-import { deleteAnnouncementMessage } from "../announcementMessage";
+import { buildMovieNightEmbeds, deleteAnnouncementMessage, refreshAnnouncementMessage } from "../announcementMessage";
 import {
   buildProposeButtonRow,
   buildProposeModal,
@@ -20,6 +20,7 @@ import {
   parseProposeModalId,
   PROPOSE_MODAL_TITLE_INPUT_ID,
 } from "../proposeInteraction";
+import { resolveProposalInput } from "../../services/proposalInput";
 import type { MovieNightService, ServiceResult } from "../../services/movieNightService";
 import type { MovieProposal } from "../../domain/types";
 
@@ -55,7 +56,9 @@ export const data = new SlashCommandBuilder()
       .addStringOption((opt) =>
         opt.setName("event").setDescription("Which movie night").setRequired(true).setAutocomplete(true),
       )
-      .addStringOption((opt) => opt.setName("title").setDescription("Movie title").setRequired(true)),
+      .addStringOption((opt) =>
+        opt.setName("title").setDescription("Movie title, or a link to it (IMDb, Netflix, etc.)").setRequired(true),
+      ),
   )
   .addSubcommand((sub) =>
     sub
@@ -179,16 +182,11 @@ async function handleSchedule(interaction: ChatInputCommandInteraction, service:
   }
 
   const event = result.value;
-  const embed = new EmbedBuilder()
-    .setTitle("🎬 Movie night scheduled!")
-    .setDescription(
-      `Scheduled by <@${event.creatorId}> for ${discordTimestamp(event.eventTime)}.\n\n` +
-        `Propose a movie with \`/movienight propose\` or vote with \`/movienight vote\`.\n` +
-        `Voting closes ${discordTimestamp(event.votingCloseTime)} (${discordTimestamp(event.votingCloseTime, "R")}), and the winner is announced automatically.`,
-    )
-    .setColor(0x5865f2);
-
-  const announcement = await channel.send({ embeds: [embed], components: [buildProposeButtonRow(event.id)] });
+  const messageData = buildMovieNightMessageData(event, [], new Map());
+  const announcement = await channel.send({
+    embeds: buildMovieNightEmbeds(messageData),
+    components: [buildProposeButtonRow(event.id)],
+  });
   service.setAnnouncementMessageId(event.id, announcement.id);
   try {
     await announcement.pin();
@@ -216,16 +214,30 @@ async function handleSchedule(interaction: ChatInputCommandInteraction, service:
   });
 }
 
-function proposeReplyContent(result: ServiceResult<MovieProposal>): string {
-  return result.ok ? `🎬 Proposed **${result.value.title}** for this movie night!` : `❌ ${result.reason}`;
+function proposeReplyPayload(result: ServiceResult<MovieProposal>): { content?: string; embeds?: EmbedBuilder[] } {
+  if (!result.ok) return { content: `❌ ${result.reason}` };
+
+  const proposal = result.value;
+  const embed = new EmbedBuilder()
+    .setDescription(`🎬 Proposed ${movieLink(proposal.title, proposal.sourceUrl)} for this movie night!`)
+    .setColor(0x5865f2);
+  if (proposal.posterUrl) {
+    embed.setThumbnail(proposal.posterUrl);
+  }
+  return { embeds: [embed] };
 }
 
 async function handlePropose(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
   const eventId = interaction.options.getString("event", true);
-  const title = interaction.options.getString("title", true);
+  const titleInput = interaction.options.getString("title", true);
 
-  const result = service.proposeMovie({ eventId, userId: interaction.user.id, title });
-  await interaction.reply({ content: proposeReplyContent(result), ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
+  const resolved = await resolveProposalInput(titleInput);
+  const result = service.proposeMovie({ eventId, userId: interaction.user.id, ...resolved });
+  if (result.ok) {
+    await refreshAnnouncementMessage(interaction.client, service, eventId);
+  }
+  await interaction.editReply(proposeReplyPayload(result));
 }
 
 /** A user clicked the "Propose a Movie" button under a movie night announcement — open the title modal. */
@@ -235,28 +247,42 @@ export async function handleProposeButton(interaction: ButtonInteraction): Promi
   await interaction.showModal(buildProposeModal(eventId));
 }
 
-/** A user submitted the propose modal's title field. */
+/** A user submitted the propose modal's title/link field. */
 export async function handleProposeModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
   const service: MovieNightService = interaction.client.movieNightService;
   const eventId = parseProposeModalId(interaction.customId);
   if (!eventId) return;
 
-  const title = interaction.fields.getTextInputValue(PROPOSE_MODAL_TITLE_INPUT_ID);
-  const result = service.proposeMovie({ eventId, userId: interaction.user.id, title });
-  await interaction.reply({ content: proposeReplyContent(result), ephemeral: true });
+  const titleInput = interaction.fields.getTextInputValue(PROPOSE_MODAL_TITLE_INPUT_ID);
+  await interaction.deferReply({ ephemeral: true });
+  const resolved = await resolveProposalInput(titleInput);
+  const result = service.proposeMovie({ eventId, userId: interaction.user.id, ...resolved });
+  if (result.ok) {
+    await refreshAnnouncementMessage(interaction.client, service, eventId);
+  }
+  await interaction.editReply(proposeReplyPayload(result));
 }
 
 async function handleVote(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
   const eventId = interaction.options.getString("event", true);
   const proposalId = interaction.options.getString("movie", true);
 
+  await interaction.deferReply({ ephemeral: true });
+
   const result = service.castVote({ eventId, userId: interaction.user.id, proposalId });
   if (!result.ok) {
-    await interaction.reply({ content: `❌ ${result.reason}`, ephemeral: true });
+    await interaction.editReply({ content: `❌ ${result.reason}` });
     return;
   }
 
-  await interaction.reply({ content: `🗳️ Voted for **${result.value.proposal.title}**!`, ephemeral: true });
+  await refreshAnnouncementMessage(interaction.client, service, eventId);
+
+  const { title, sourceUrl, posterUrl } = result.value.proposal;
+  const embed = new EmbedBuilder().setDescription(`🗳️ Voted for ${movieLink(title, sourceUrl)}!`).setColor(0x5865f2);
+  if (posterUrl) {
+    embed.setThumbnail(posterUrl);
+  }
+  await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleStatus(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
@@ -268,25 +294,12 @@ async function handleStatus(interaction: ChatInputCommandInteraction, service: M
   }
 
   const { event, proposals, counts } = status;
-  const ranked = [...proposals].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
-  const lines =
-    ranked.length === 0
-      ? ["_No movies proposed yet._"]
-      : ranked.map((p) => `**${p.title}** — ${counts.get(p.id) ?? 0} vote(s)`);
-
-  const embed = new EmbedBuilder()
-    .setTitle("🎬 Movie night status")
-    .setDescription(
-      `Event: ${discordTimestamp(event.eventTime)}\n` +
-        `Status: **${event.status}**\n` +
-        `Voting closes: ${discordTimestamp(event.votingCloseTime)} (${discordTimestamp(event.votingCloseTime, "R")})\n\n` +
-        lines.join("\n"),
-    )
-    .setColor(0x5865f2);
+  const messageData = buildMovieNightMessageData(event, proposals, counts);
 
   await interaction.reply({
-    embeds: [embed],
+    embeds: buildMovieNightEmbeds(messageData),
     components: event.status === "open" ? [buildProposeButtonRow(event.id)] : [],
+    ephemeral: true,
   });
 }
 

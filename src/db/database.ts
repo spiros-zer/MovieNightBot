@@ -34,4 +34,12 @@ function migrate(db: DatabaseSyncType): void {
   if (!guildConfigColumns.some((c) => c.name === "default_time_zone")) {
     db.exec("ALTER TABLE guild_config ADD COLUMN default_time_zone TEXT NOT NULL DEFAULT 'UTC'");
   }
+
+  const proposalColumns = db.prepare("PRAGMA table_info(proposals)").all() as unknown as { name: string }[];
+  if (!proposalColumns.some((c) => c.name === "poster_url")) {
+    db.exec("ALTER TABLE proposals ADD COLUMN poster_url TEXT");
+  }
+  if (!proposalColumns.some((c) => c.name === "source_url")) {
+    db.exec("ALTER TABLE proposals ADD COLUMN source_url TEXT");
+  }
 }

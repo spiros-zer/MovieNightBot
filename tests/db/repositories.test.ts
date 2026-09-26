@@ -158,6 +158,8 @@ describe("ProposalRepository", () => {
       userId: "user-1",
       title: "The Matrix",
       createdAt: new Date("2026-01-05T00:00:00.000Z"),
+      posterUrl: "https://img.example.com/matrix.jpg",
+      sourceUrl: "https://www.imdb.com/title/tt0133093/",
     };
     proposalRepo.create(proposal);
 
@@ -168,9 +170,33 @@ describe("ProposalRepository", () => {
   it("counts proposals per user within an event", () => {
     const event = makeEvent();
     eventRepo.create(event);
-    proposalRepo.create({ id: randomUUID(), eventId: event.id, userId: "user-1", title: "A", createdAt: new Date() });
-    proposalRepo.create({ id: randomUUID(), eventId: event.id, userId: "user-1", title: "B", createdAt: new Date() });
-    proposalRepo.create({ id: randomUUID(), eventId: event.id, userId: "user-2", title: "C", createdAt: new Date() });
+    proposalRepo.create({
+      id: randomUUID(),
+      eventId: event.id,
+      userId: "user-1",
+      title: "A",
+      createdAt: new Date(),
+      posterUrl: null,
+      sourceUrl: null,
+    });
+    proposalRepo.create({
+      id: randomUUID(),
+      eventId: event.id,
+      userId: "user-1",
+      title: "B",
+      createdAt: new Date(),
+      posterUrl: null,
+      sourceUrl: null,
+    });
+    proposalRepo.create({
+      id: randomUUID(),
+      eventId: event.id,
+      userId: "user-2",
+      title: "C",
+      createdAt: new Date(),
+      posterUrl: null,
+      sourceUrl: null,
+    });
 
     expect(proposalRepo.countByEventAndUser(event.id, "user-1")).toBe(2);
     expect(proposalRepo.countByEventAndUser(event.id, "user-2")).toBe(1);
@@ -182,7 +208,15 @@ describe("VoteRepository", () => {
   it("round-trips a vote and finds it by event and user", () => {
     const event = makeEvent();
     eventRepo.create(event);
-    const proposal = { id: randomUUID(), eventId: event.id, userId: "user-1", title: "A", createdAt: new Date() };
+    const proposal = {
+      id: randomUUID(),
+      eventId: event.id,
+      userId: "user-1",
+      title: "A",
+      createdAt: new Date(),
+      posterUrl: null,
+      sourceUrl: null,
+    };
     proposalRepo.create(proposal);
 
     const vote = { id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposal.id, createdAt: new Date() };
@@ -196,7 +230,15 @@ describe("VoteRepository", () => {
   it("rejects a second vote from the same user in the same event", () => {
     const event = makeEvent();
     eventRepo.create(event);
-    const proposal = { id: randomUUID(), eventId: event.id, userId: "user-1", title: "A", createdAt: new Date() };
+    const proposal = {
+      id: randomUUID(),
+      eventId: event.id,
+      userId: "user-1",
+      title: "A",
+      createdAt: new Date(),
+      posterUrl: null,
+      sourceUrl: null,
+    };
     proposalRepo.create(proposal);
 
     voteRepo.create({ id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposal.id, createdAt: new Date() });

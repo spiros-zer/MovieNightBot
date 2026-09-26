@@ -21,9 +21,10 @@ export function parseProposeButtonId(customId: string): string | null {
 export function buildProposeModal(eventId: string): ModalBuilder {
   const titleInput = new TextInputBuilder()
     .setCustomId(PROPOSE_MODAL_TITLE_INPUT_ID)
-    .setLabel("Movie title")
+    .setLabel("Title, or a link (IMDb, Netflix, etc.)")
+    .setPlaceholder("The Matrix, or https://www.imdb.com/title/tt0133093/")
     .setStyle(TextInputStyle.Short)
-    .setMaxLength(100)
+    .setMaxLength(300)
     .setRequired(true);
 
   return new ModalBuilder()

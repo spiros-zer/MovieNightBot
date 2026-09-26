@@ -18,7 +18,7 @@ async function main(): Promise<void> {
     proposalRepo: new ProposalRepository(db),
     voteRepo: new VoteRepository(db),
     scheduler,
-    onVotingClosed: (payload) => announceWinner(client, payload),
+    onVotingClosed: (payload) => announceWinner(client, service, payload),
   });
 
   const client = createClient(service);

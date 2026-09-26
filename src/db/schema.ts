@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS proposals (
   event_id TEXT NOT NULL REFERENCES events(id),
   user_id TEXT NOT NULL,
   title TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  poster_url TEXT,
+  source_url TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_proposals_event ON proposals(event_id);
 

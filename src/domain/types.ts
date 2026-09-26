@@ -35,6 +35,10 @@ export interface MovieProposal {
   userId: string;
   title: string;
   createdAt: Date;
+  /** Poster/preview image resolved from a pasted streaming/IMDb link, if the proposal came from one. */
+  posterUrl: string | null;
+  /** The original link a user pasted to propose this movie, if any. */
+  sourceUrl: string | null;
 }
 
 export interface Vote {

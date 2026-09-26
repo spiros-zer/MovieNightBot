@@ -3,7 +3,7 @@ import { tallyVotes } from "../../src/domain/tally";
 import type { MovieProposal, Vote } from "../../src/domain/types";
 
 function proposal(id: string, userId = "proposer"): MovieProposal {
-  return { id, eventId: "event-1", userId, title: `Movie ${id}`, createdAt: new Date() };
+  return { id, eventId: "event-1", userId, title: `Movie ${id}`, createdAt: new Date(), posterUrl: null, sourceUrl: null };
 }
 
 function vote(id: string, proposalId: string, userId: string): Vote {
