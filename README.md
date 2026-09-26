@@ -27,9 +27,15 @@ before the event starts.
    `og:title`/`og:image` tags used for share previews on iMessage/WhatsApp/
    Discord itself) to fill in the correct title and poster automatically. If
    a link can't be read, the raw link is used as the title so proposing still
-   succeeds. The status message updates immediately to show the new proposal.
-3. Members vote for one proposed movie with `/movienight vote` (one vote per
-   person) — the status message's vote counts update immediately.
+   succeeds. The status message updates immediately to show the new proposal,
+   numbered with the keycap emoji (1️⃣, 2️⃣, ...) the bot reacts with —
+   a proposal's number is fixed for the event, even as movies get reordered
+   by vote count.
+3. Members vote by reacting with a movie's number emoji on the status
+   message, or with `/movienight vote` (equivalent to reacting). Only one
+   reaction counts: pressing a different number moves your vote there and
+   removes your old reaction, and removing your reaction entirely retracts
+   your vote. The status message's vote counts update immediately either way.
 4. A configurable number of minutes before the event (also set via
    `/movienight config`), voting closes automatically and the bot announces
    the winner in the event's channel, and the status message flips to
@@ -89,7 +95,7 @@ npm run dev
 |---|---|---|
 | `/movienight schedule date time [timezone] [channel]` | anyone | Schedules a movie night (`date` is `MM-DD`, current year assumed; `time` is when the movie starts). |
 | `/movienight propose event title` | anyone | Proposes a movie — `title` can be a movie title or a link to it (IMDb, Netflix, etc.). |
-| `/movienight vote event movie` | anyone | Casts a single vote. |
+| `/movienight vote event movie` | anyone | Casts (or moves) your vote — same effect as reacting with that movie's number on the status message. |
 | `/movienight status event` | anyone | Shows the current proposals and vote counts (ephemeral — the pinned message already stays current). |
 | `/movienight cancel event` | the event's creator | Cancels a movie night. |
 | `/movienight config [max-proposals] [close-before-minutes] [timezone]` | Manage Server permission | Views/changes per-server rules, including the default time zone used when `schedule` omits one. |
@@ -113,10 +119,14 @@ Discord or a database:
   where guild config, event/proposal/vote rules, and scheduling meet.
 - `src/discord/` — slash command definitions, date/time parsing, embed
   formatting, and the bot client itself. `formatting.ts` builds the pinned
-  status message's content (header + one embed per movie) as plain data;
-  `announcementMessage.ts` turns that into real embeds and edits the pinned
-  message in place (`refreshAnnouncementMessage`), called after every
-  propose/vote/close.
+  status message's content (header + one embed per movie, each numbered with
+  a keycap emoji) as plain data; `announcementMessage.ts` turns that into
+  real embeds and edits the pinned message in place
+  (`refreshAnnouncementMessage`), called after every propose/vote/close, and
+  reacts a newly proposed movie's number onto it. `voteReaction.ts` handles
+  the other side: a user reacting/un-reacting with a number on that message
+  casts, moves, or retracts their vote through the same service the `vote`
+  subcommand uses.
 - `src/services/linkMetadata.ts` — fetches a pasted URL's link-preview
   (Open Graph/Twitter Card) title and image; `src/services/proposalInput.ts`
   turns a propose field's raw text into a title/poster/source triple,

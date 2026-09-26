@@ -35,12 +35,9 @@ export function canPropose(params: {
   return { allowed: true };
 }
 
-export function canVote(params: {
-  event: MovieNightEvent;
-  hasExistingVote: boolean;
-  proposalCount: number;
-}): RuleResult {
-  const { event, hasExistingVote, proposalCount } = params;
+/** A user may (re-)cast their vote any time voting is open; casting again just moves it to the new proposal. */
+export function canVote(params: { event: MovieNightEvent; proposalCount: number }): RuleResult {
+  const { event, proposalCount } = params;
 
   if (event.status === "cancelled") {
     return { allowed: false, reason: "This movie night has been cancelled." };
@@ -50,9 +47,6 @@ export function canVote(params: {
   }
   if (proposalCount === 0) {
     return { allowed: false, reason: "There are no movies proposed yet to vote for." };
-  }
-  if (hasExistingVote) {
-    return { allowed: false, reason: "You've already voted for this movie night." };
   }
   return { allowed: true };
 }

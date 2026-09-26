@@ -1,14 +1,25 @@
-import { Client, EmbedBuilder, GatewayIntentBits, GuildScheduledEventStatus, TextChannel } from "discord.js";
+import { Client, EmbedBuilder, GatewayIntentBits, GuildScheduledEventStatus, Partials, TextChannel } from "discord.js";
 import "./types";
 import * as movienight from "./commands/movienight";
 import { buildAnnouncementEmbedData, channelDisplayName } from "./formatting";
 import { buildResultDescription } from "./scheduledEvent";
 import { PROPOSE_BUTTON_PREFIX, PROPOSE_MODAL_PREFIX } from "./proposeInteraction";
 import { deleteAnnouncementMessage, refreshAnnouncementMessage } from "./announcementMessage";
+import { handleVoteReactionAdd, handleVoteReactionRemove } from "./voteReaction";
 import type { MovieNightService, VotingClosedPayload } from "../services/movieNightService";
 
 export function createClient(service: MovieNightService): Client {
-  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildScheduledEvents] });
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildScheduledEvents,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildMessageReactions,
+    ],
+    // The status message's reactions come from users who may not be cached, and the message
+    // itself may not be cached either after a bot restart — partials let those events through.
+    partials: [Partials.Message, Partials.Reaction, Partials.User],
+  });
   client.movieNightService = service;
 
   client.once("clientReady", (readyClient) => {
@@ -47,6 +58,17 @@ export function createClient(service: MovieNightService): Client {
     if (newEvent.status === GuildScheduledEventStatus.Canceled) {
       void handleNativeScheduledEventCancellation(client, service, newEvent.id);
     }
+  });
+
+  client.on("messageReactionAdd", (reaction, user) => {
+    handleVoteReactionAdd(reaction, user, client, service).catch((error) =>
+      console.error("Error handling vote reaction add:", error),
+    );
+  });
+  client.on("messageReactionRemove", (reaction, user) => {
+    handleVoteReactionRemove(reaction, user, client, service).catch((error) =>
+      console.error("Error handling vote reaction remove:", error),
+    );
   });
 
   return client;

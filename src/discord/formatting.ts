@@ -82,14 +82,30 @@ export interface MovieNightMessageData {
   movieEmbeds: MovieRowEmbed[];
 }
 
-/** Discord allows at most 10 embeds per message; one is the header, leaving this many for movies. */
-export const MAX_MOVIE_ROW_EMBEDS = 9;
+/**
+ * Keycap number emoji, in order — what the bot reacts with on each proposal and what it reads
+ * back off a vote reaction. Also caps how many proposals can be voted on by reaction (and,
+ * relatedly, how many get their own embed row: Discord allows at most 10 embeds per message,
+ * one of which is the header).
+ */
+export const NUMBER_EMOJIS = Array.from({ length: 9 }, (_, i) => `${i + 1}️⃣`);
+export const MAX_MOVIE_ROW_EMBEDS = NUMBER_EMOJIS.length;
+
+/** The proposal index a vote-reaction emoji corresponds to, or null if it isn't one the bot manages. */
+export function numberEmojiIndex(emoji: string): number | null {
+  const index = NUMBER_EMOJIS.indexOf(emoji);
+  return index === -1 ? null : index;
+}
 
 /**
  * Renders the single live status embed set for a movie night: a header (who scheduled it, when,
  * open/closed, voting deadline) followed by one small embed per proposed movie with its own
  * poster thumbnail and vote count. This is sent once and then edited in place as proposals and
  * votes come in, rather than posting a new message each time.
+ *
+ * Each proposal's number (and reaction) is assigned by proposal order and stays fixed for the
+ * event's lifetime, even though rows are displayed sorted by vote count — otherwise a movie's
+ * number would shift under an already-placed reaction as votes came in.
  */
 export function buildMovieNightMessageData(
   event: MovieNightEvent,
@@ -97,9 +113,10 @@ export function buildMovieNightMessageData(
   counts: Map<string, number>,
 ): MovieNightMessageData {
   const isOpen = event.status === "open";
-  const ranked = [...proposals].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
-  const shown = ranked.slice(0, MAX_MOVIE_ROW_EMBEDS);
-  const overflow = ranked.slice(MAX_MOVIE_ROW_EMBEDS);
+  const numbered = proposals.slice(0, MAX_MOVIE_ROW_EMBEDS);
+  const overflow = proposals.slice(MAX_MOVIE_ROW_EMBEDS);
+  const numberByProposalId = new Map(numbered.map((p, i) => [p.id, i]));
+  const ranked = [...numbered].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
 
   const headerLines = [
     `Event: ${discordTimestamp(event.eventTime)}`,
@@ -107,11 +124,14 @@ export function buildMovieNightMessageData(
     `Voting closes: ${isOpen ? `${discordTimestamp(event.votingCloseTime)} (${discordTimestamp(event.votingCloseTime, "R")})` : "closed"}`,
   ];
 
-  if (ranked.length === 0) {
+  if (proposals.length === 0) {
     headerLines.push("", "_No movies proposed yet._");
-  } else if (overflow.length > 0) {
-    const overflowList = overflow.map((p) => movieLink(p.title, p.sourceUrl)).join(", ");
-    headerLines.push("", `_+${overflow.length} more: ${overflowList}_`);
+  } else {
+    if (isOpen) headerLines.push("", "_React with a movie's number below to vote — pressing another number moves your vote._");
+    if (overflow.length > 0) {
+      const overflowList = overflow.map((p) => movieLink(p.title, p.sourceUrl)).join(", ");
+      headerLines.push("", `_+${overflow.length} more: ${overflowList}_`);
+    }
   }
 
   const header: EmbedData = {
@@ -120,11 +140,12 @@ export function buildMovieNightMessageData(
     fields: [{ name: "Scheduled by", value: `<@${event.creatorId}>`, inline: true }],
   };
 
-  const movieEmbeds: MovieRowEmbed[] = shown.map((p) => {
+  const movieEmbeds: MovieRowEmbed[] = ranked.map((p) => {
     const votes = counts.get(p.id) ?? 0;
     const isWinner = p.id === event.winningProposalId;
+    const numberEmoji = NUMBER_EMOJIS[numberByProposalId.get(p.id)!];
     return {
-      title: `${isWinner ? "🏆 " : ""}${p.title}`,
+      title: `${numberEmoji} ${isWinner ? "🏆 " : ""}${p.title}`,
       description: `${votes} vote${votes === 1 ? "" : "s"}`,
       ...(p.sourceUrl ? { url: p.sourceUrl } : {}),
       ...(p.posterUrl ? { imageUrl: p.posterUrl } : {}),

@@ -87,29 +87,22 @@ describe("canPropose", () => {
 });
 
 describe("canVote", () => {
-  it("allows voting when the event is open and the user has not voted yet", () => {
+  it("allows voting when the event is open and there are proposals", () => {
     const event = makeEvent({ status: "open" });
-    const result = canVote({ event, hasExistingVote: false, proposalCount: 2 });
+    const result = canVote({ event, proposalCount: 2 });
     expect(result).toEqual({ allowed: true });
-  });
-
-  it("rejects a second vote from the same user", () => {
-    const event = makeEvent({ status: "open" });
-    const result = canVote({ event, hasExistingVote: true, proposalCount: 2 });
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toMatch(/already voted/i);
   });
 
   it("rejects voting once the event is no longer open", () => {
     const event = makeEvent({ status: "voting_closed" });
-    const result = canVote({ event, hasExistingVote: false, proposalCount: 2 });
+    const result = canVote({ event, proposalCount: 2 });
     expect(result.allowed).toBe(false);
     expect(result.reason).toMatch(/closed/i);
   });
 
   it("rejects voting when there are no proposals to vote for", () => {
     const event = makeEvent({ status: "open" });
-    const result = canVote({ event, hasExistingVote: false, proposalCount: 0 });
+    const result = canVote({ event, proposalCount: 0 });
     expect(result.allowed).toBe(false);
     expect(result.reason).toMatch(/no movies/i);
   });

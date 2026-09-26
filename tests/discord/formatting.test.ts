@@ -6,6 +6,8 @@ import {
   discordTimestamp,
   MAX_MOVIE_ROW_EMBEDS,
   movieLink,
+  NUMBER_EMOJIS,
+  numberEmojiIndex,
 } from "../../src/discord/formatting";
 import type { MovieNightEvent, MovieProposal } from "../../src/domain/types";
 import type { VotingClosedPayload } from "../../src/services/movieNightService";
@@ -89,6 +91,17 @@ describe("movieLink", () => {
 
   it("falls back to plain bold if the URL itself contains a closing paren", () => {
     expect(movieLink("The Matrix", "https://example.com/movie(1999)")).toBe("**The Matrix**");
+  });
+});
+
+describe("numberEmojiIndex", () => {
+  it("maps a known number emoji back to its zero-based index", () => {
+    expect(numberEmojiIndex(NUMBER_EMOJIS[0])).toBe(0);
+    expect(numberEmojiIndex(NUMBER_EMOJIS[8])).toBe(8);
+  });
+
+  it("returns null for anything that isn't a tracked number emoji", () => {
+    expect(numberEmojiIndex("👍")).toBeNull();
   });
 });
 
@@ -211,9 +224,9 @@ describe("buildMovieNightMessageData", () => {
     const result = buildMovieNightMessageData(event, [p1, p2], counts);
 
     expect(result.movieEmbeds).toEqual([
-      { title: "Inception", description: "3 votes" },
+      { title: `${NUMBER_EMOJIS[1]} Inception`, description: "3 votes" },
       {
-        title: "The Matrix",
+        title: `${NUMBER_EMOJIS[0]} The Matrix`,
         description: "1 vote",
         url: "https://www.netflix.com/title/1",
         imageUrl: "https://img.example.com/matrix.jpg",
@@ -221,12 +234,31 @@ describe("buildMovieNightMessageData", () => {
     ]);
   });
 
+  it("gives each proposal a number fixed by proposal order, unaffected by vote-count reordering", () => {
+    const event = baseEvent();
+    const p1 = proposal("p1", "The Matrix", "u1");
+    const p2 = proposal("p2", "Inception", "u2");
+    const p3 = proposal("p3", "Arrival", "u3");
+    const counts = new Map([
+      ["p1", 0],
+      ["p2", 5],
+      ["p3", 1],
+    ]);
+
+    const result = buildMovieNightMessageData(event, [p1, p2, p3], counts);
+
+    const byTitle = new Map(result.movieEmbeds.map((row) => [row.title.split(" ").slice(1).join(" "), row.title.split(" ")[0]]));
+    expect(byTitle.get("The Matrix")).toBe(NUMBER_EMOJIS[0]);
+    expect(byTitle.get("Inception")).toBe(NUMBER_EMOJIS[1]);
+    expect(byTitle.get("Arrival")).toBe(NUMBER_EMOJIS[2]);
+  });
+
   it("marks the winning proposal once the event is closed", () => {
     const event = baseEvent({ status: "announced", winningProposalId: "p1" });
     const p1 = proposal("p1", "The Matrix", "u1");
     const result = buildMovieNightMessageData(event, [p1], new Map([["p1", 2]]));
 
-    expect(result.movieEmbeds[0].title).toBe("🏆 The Matrix");
+    expect(result.movieEmbeds[0].title).toBe(`${NUMBER_EMOJIS[0]} 🏆 The Matrix`);
     expect(result.header.description).toContain("Status: **closed**");
     expect(result.header.description).toContain("Voting closes: closed");
   });
@@ -240,5 +272,20 @@ describe("buildMovieNightMessageData", () => {
 
     expect(result.movieEmbeds).toHaveLength(MAX_MOVIE_ROW_EMBEDS);
     expect(result.header.description).toMatch(/\+3 more/);
+  });
+
+  it("keeps the first proposals numbered even if a later one outvotes them, since reactions are already tied to those numbers", () => {
+    const event = baseEvent();
+    const proposals = Array.from({ length: MAX_MOVIE_ROW_EMBEDS + 1 }, (_, i) => proposal(`p${i}`, `Movie ${i}`, `u${i}`));
+    // The overflow (11th) proposal gets by far the most votes, but it was proposed too late to
+    // have a number/reaction, so it must not bump an earlier one out of the numbered rows.
+    const counts = new Map(proposals.map((p, i) => [p.id, i === proposals.length - 1 ? 100 : 0]));
+
+    const result = buildMovieNightMessageData(event, proposals, counts);
+
+    expect(result.movieEmbeds).toHaveLength(MAX_MOVIE_ROW_EMBEDS);
+    expect(result.movieEmbeds.some((row) => row.title.includes("Movie 0"))).toBe(true);
+    expect(result.movieEmbeds.some((row) => row.title.includes(`Movie ${MAX_MOVIE_ROW_EMBEDS}`))).toBe(false);
+    expect(result.header.description).toContain(`Movie ${MAX_MOVIE_ROW_EMBEDS}`);
   });
 });

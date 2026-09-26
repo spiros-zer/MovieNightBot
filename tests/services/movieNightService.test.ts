@@ -155,13 +155,19 @@ describe("castVote", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("rejects a second vote from the same user", () => {
-    const { event, proposal } = eventWithProposal();
-    service.castVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
-    const second = service.castVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
-    expect(second.ok).toBe(false);
-    if (second.ok) return;
-    expect(second.reason).toMatch(/already voted/i);
+  it("moves an existing vote to a new proposal instead of rejecting it", () => {
+    const { event, proposal: first } = eventWithProposal();
+    const secondProposalResult = service.proposeMovie({ eventId: event.id, userId: "proposer-2", title: "Inception" });
+    if (!secondProposalResult.ok) throw new Error("expected success");
+    const second = secondProposalResult.value;
+
+    service.castVote({ eventId: event.id, userId: "voter-1", proposalId: first.id });
+    const result = service.castVote({ eventId: event.id, userId: "voter-1", proposalId: second.id });
+    expect(result.ok).toBe(true);
+
+    const status = service.getStatus(event.id);
+    expect(status?.counts.get(first.id)).toBe(0);
+    expect(status?.counts.get(second.id)).toBe(1);
   });
 
   it("rejects a vote for a proposal that doesn't belong to the event", () => {
@@ -178,6 +184,44 @@ describe("castVote", () => {
 
     const result = service.castVote({ eventId: event.id, userId: "voter-1", proposalId: otherProposal.value.id });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("retractVote", () => {
+  function eventWithProposal() {
+    const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
+    if (!eventResult.ok) throw new Error("expected success");
+    const proposalResult = service.proposeMovie({ eventId: eventResult.value.id, userId: "proposer", title: "The Matrix" });
+    if (!proposalResult.ok) throw new Error("expected success");
+    return { event: eventResult.value, proposal: proposalResult.value };
+  }
+
+  it("clears a vote that still points at the given proposal", () => {
+    const { event, proposal } = eventWithProposal();
+    service.castVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
+
+    const retracted = service.retractVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
+    expect(retracted).toBe(true);
+    expect(service.getStatus(event.id)?.counts.get(proposal.id)).toBe(0);
+  });
+
+  it("does nothing if the vote already moved to a different proposal", () => {
+    const { event, proposal: first } = eventWithProposal();
+    const secondResult = service.proposeMovie({ eventId: event.id, userId: "proposer-2", title: "Inception" });
+    if (!secondResult.ok) throw new Error("expected success");
+
+    service.castVote({ eventId: event.id, userId: "voter-1", proposalId: first.id });
+    service.castVote({ eventId: event.id, userId: "voter-1", proposalId: secondResult.value.id });
+
+    const retracted = service.retractVote({ eventId: event.id, userId: "voter-1", proposalId: first.id });
+    expect(retracted).toBe(false);
+    expect(service.getStatus(event.id)?.counts.get(secondResult.value.id)).toBe(1);
+  });
+
+  it("does nothing if the user never voted", () => {
+    const { event, proposal } = eventWithProposal();
+    const retracted = service.retractVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
+    expect(retracted).toBe(false);
   });
 });
 

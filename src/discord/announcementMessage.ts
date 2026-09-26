@@ -1,7 +1,7 @@
 import { EmbedBuilder, type Client } from "discord.js";
 import type { MovieNightEvent } from "../domain/types";
 import type { MovieNightService } from "../services/movieNightService";
-import { buildMovieNightMessageData, type MovieNightMessageData } from "./formatting";
+import { buildMovieNightMessageData, NUMBER_EMOJIS, type MovieNightMessageData } from "./formatting";
 import { buildProposeButtonRow } from "./proposeInteraction";
 
 const EMBED_COLOR = 0x5865f2;
@@ -50,8 +50,17 @@ export function buildMovieNightEmbeds(data: MovieNightMessageData): EmbedBuilder
  * every proposal, vote, and voting close so the channel always shows current standings without
  * a new message each time. Best-effort: logs and swallows any failure (message deleted,
  * missing permissions, etc.) since this always runs alongside an action that already succeeded.
+ *
+ * When `newProposalId` is given (a proposal was just added), also adds that proposal's number
+ * reaction to the message so it becomes votable — done here rather than via a second fetch since
+ * the message is already in hand.
  */
-export async function refreshAnnouncementMessage(client: Client, service: MovieNightService, eventId: string): Promise<void> {
+export async function refreshAnnouncementMessage(
+  client: Client,
+  service: MovieNightService,
+  eventId: string,
+  newProposalId?: string,
+): Promise<void> {
   const status = service.getStatus(eventId);
   if (!status || !status.event.announcementMessageId) return;
 
@@ -65,6 +74,13 @@ export async function refreshAnnouncementMessage(client: Client, service: MovieN
       embeds: buildMovieNightEmbeds(data),
       components: status.event.status === "open" ? [buildProposeButtonRow(status.event.id)] : [],
     });
+
+    if (newProposalId) {
+      const index = status.proposals.findIndex((p) => p.id === newProposalId);
+      if (index !== -1 && index < NUMBER_EMOJIS.length) {
+        await message.react(NUMBER_EMOJIS[index]);
+      }
+    }
   } catch (error) {
     console.error(`Failed to refresh announcement message for movie night ${eventId}:`, error);
   }

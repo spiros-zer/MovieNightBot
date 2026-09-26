@@ -62,6 +62,13 @@ export class EventRepository {
     return row ? toDomain(row) : null;
   }
 
+  getByAnnouncementMessageId(announcementMessageId: string): MovieNightEvent | null {
+    const row = this.db.prepare("SELECT * FROM events WHERE announcement_message_id = ?").get(announcementMessageId) as
+      | EventRow
+      | undefined;
+    return row ? toDomain(row) : null;
+  }
+
   listOpenEventsForGuild(guildId: string): MovieNightEvent[] {
     const rows = this.db
       .prepare("SELECT * FROM events WHERE guild_id = ? AND status = 'open' ORDER BY event_time ASC")

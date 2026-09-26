@@ -235,7 +235,7 @@ async function handlePropose(interaction: ChatInputCommandInteraction, service: 
   const resolved = await resolveProposalInput(titleInput);
   const result = service.proposeMovie({ eventId, userId: interaction.user.id, ...resolved });
   if (result.ok) {
-    await refreshAnnouncementMessage(interaction.client, service, eventId);
+    await refreshAnnouncementMessage(interaction.client, service, eventId, result.value.id);
   }
   await interaction.editReply(proposeReplyPayload(result));
 }
@@ -258,7 +258,7 @@ export async function handleProposeModalSubmit(interaction: ModalSubmitInteracti
   const resolved = await resolveProposalInput(titleInput);
   const result = service.proposeMovie({ eventId, userId: interaction.user.id, ...resolved });
   if (result.ok) {
-    await refreshAnnouncementMessage(interaction.client, service, eventId);
+    await refreshAnnouncementMessage(interaction.client, service, eventId, result.value.id);
   }
   await interaction.editReply(proposeReplyPayload(result));
 }

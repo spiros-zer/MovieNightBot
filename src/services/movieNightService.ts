@@ -114,6 +114,11 @@ export class MovieNightService {
     return this.eventRepo.getByDiscordEventId(discordEventId);
   }
 
+  /** Looks up a movie night by its pinned status message id, so a reaction on that message can be routed back to it. */
+  getEventByAnnouncementMessageId(announcementMessageId: string): MovieNightEvent | null {
+    return this.eventRepo.getByAnnouncementMessageId(announcementMessageId);
+  }
+
   /** Records the id of the Discord guild scheduled event (Events tab) created for this movie night, if any. */
   setDiscordEventId(eventId: string, discordEventId: string | null): MovieNightEvent | null {
     const event = this.eventRepo.getById(eventId);
@@ -196,19 +201,31 @@ export class MovieNightService {
     }
 
     const proposals = this.proposalRepo.listByEvent(event.id);
-    const existingVote = this.voteRepo.getByEventAndUser(event.id, params.userId);
-    const rule = canVote({ event, hasExistingVote: existingVote !== null, proposalCount: proposals.length });
+    const rule = canVote({ event, proposalCount: proposals.length });
     if (!rule.allowed) return { ok: false, reason: rule.reason! };
 
+    const existingVote = this.voteRepo.getByEventAndUser(event.id, params.userId);
     const vote: Vote = {
-      id: this.generateId(),
+      id: existingVote?.id ?? this.generateId(),
       eventId: event.id,
       userId: params.userId,
       proposalId: proposal.id,
       createdAt: this.now(),
     };
-    this.voteRepo.create(vote);
+    this.voteRepo.upsert(vote);
     return { ok: true, value: { vote, proposal } };
+  }
+
+  /**
+   * Clears a user's vote, but only if it still points at `proposalId` — used when a vote reaction
+   * is removed, so it can't retract a vote that was already moved elsewhere by a newer reaction.
+   * Returns whether anything was actually retracted.
+   */
+  retractVote(params: { eventId: string; userId: string; proposalId: string }): boolean {
+    const existingVote = this.voteRepo.getByEventAndUser(params.eventId, params.userId);
+    if (!existingVote || existingVote.proposalId !== params.proposalId) return false;
+    this.voteRepo.delete(params.eventId, params.userId);
+    return true;
   }
 
   cancelEvent(eventId: string, requesterId: string): ServiceResult<MovieNightEvent> {

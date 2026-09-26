@@ -146,6 +146,15 @@ describe("EventRepository", () => {
     eventRepo.setAnnouncementMessageId(event.id, null);
     expect(eventRepo.getById(event.id)?.announcementMessageId).toBeNull();
   });
+
+  it("looks up an event by its announcement message id", () => {
+    const event = makeEvent();
+    eventRepo.create(event);
+    eventRepo.setAnnouncementMessageId(event.id, "message-1");
+
+    expect(eventRepo.getByAnnouncementMessageId("message-1")?.id).toBe(event.id);
+    expect(eventRepo.getByAnnouncementMessageId("missing")).toBeNull();
+  });
 });
 
 describe("ProposalRepository", () => {
@@ -205,46 +214,57 @@ describe("ProposalRepository", () => {
 });
 
 describe("VoteRepository", () => {
-  it("round-trips a vote and finds it by event and user", () => {
-    const event = makeEvent();
-    eventRepo.create(event);
-    const proposal = {
+  function makeProposal(overrides: Partial<{ id: string; eventId: string; userId: string; title: string }> = {}) {
+    return {
       id: randomUUID(),
-      eventId: event.id,
+      eventId: "",
       userId: "user-1",
       title: "A",
       createdAt: new Date(),
       posterUrl: null,
       sourceUrl: null,
+      ...overrides,
     };
+  }
+
+  it("round-trips a vote and finds it by event and user", () => {
+    const event = makeEvent();
+    eventRepo.create(event);
+    const proposal = makeProposal({ eventId: event.id });
     proposalRepo.create(proposal);
 
     const vote = { id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposal.id, createdAt: new Date() };
-    voteRepo.create(vote);
+    voteRepo.upsert(vote);
 
     expect(voteRepo.getByEventAndUser(event.id, "user-2")).toEqual(vote);
     expect(voteRepo.getByEventAndUser(event.id, "someone-else")).toBeNull();
     expect(voteRepo.listByEvent(event.id)).toEqual([vote]);
   });
 
-  it("rejects a second vote from the same user in the same event", () => {
+  it("moves an existing vote to a different proposal instead of duplicating it", () => {
     const event = makeEvent();
     eventRepo.create(event);
-    const proposal = {
-      id: randomUUID(),
-      eventId: event.id,
-      userId: "user-1",
-      title: "A",
-      createdAt: new Date(),
-      posterUrl: null,
-      sourceUrl: null,
-    };
+    const proposalA = makeProposal({ eventId: event.id, title: "A" });
+    const proposalB = makeProposal({ eventId: event.id, title: "B" });
+    proposalRepo.create(proposalA);
+    proposalRepo.create(proposalB);
+
+    voteRepo.upsert({ id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposalA.id, createdAt: new Date() });
+    voteRepo.upsert({ id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposalB.id, createdAt: new Date() });
+
+    expect(voteRepo.getByEventAndUser(event.id, "user-2")?.proposalId).toBe(proposalB.id);
+    expect(voteRepo.listByEvent(event.id)).toHaveLength(1);
+  });
+
+  it("deletes a vote", () => {
+    const event = makeEvent();
+    eventRepo.create(event);
+    const proposal = makeProposal({ eventId: event.id });
     proposalRepo.create(proposal);
 
-    voteRepo.create({ id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposal.id, createdAt: new Date() });
+    voteRepo.upsert({ id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposal.id, createdAt: new Date() });
+    voteRepo.delete(event.id, "user-2");
 
-    expect(() =>
-      voteRepo.create({ id: randomUUID(), eventId: event.id, userId: "user-2", proposalId: proposal.id, createdAt: new Date() }),
-    ).toThrow();
+    expect(voteRepo.getByEventAndUser(event.id, "user-2")).toBeNull();
   });
 });
