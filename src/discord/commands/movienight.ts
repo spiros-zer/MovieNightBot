@@ -26,7 +26,7 @@ import type { MovieProposal } from "../../domain/types";
 
 export const data = new SlashCommandBuilder()
   .setName("movienight")
-  .setDescription("Organize a movie night: schedule it, propose movies, and vote.")
+  .setDescription("Organize a movie night: schedule it, propose via the button, and vote by reacting.")
   .addSubcommand((sub) =>
     sub
       .setName("schedule")
@@ -47,36 +47,6 @@ export const data = new SlashCommandBuilder()
           .setDescription("Channel to announce and run the movie night in (default: this channel)")
           .addChannelTypes(ChannelType.GuildText)
           .setRequired(false),
-      ),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName("propose")
-      .setDescription("Propose a movie for a scheduled movie night.")
-      .addStringOption((opt) =>
-        opt.setName("event").setDescription("Which movie night").setRequired(true).setAutocomplete(true),
-      )
-      .addStringOption((opt) =>
-        opt.setName("title").setDescription("Movie title, or a link to it (IMDb, Netflix, etc.)").setRequired(true),
-      ),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName("vote")
-      .setDescription("Vote for one of the proposed movies.")
-      .addStringOption((opt) =>
-        opt.setName("event").setDescription("Which movie night").setRequired(true).setAutocomplete(true),
-      )
-      .addStringOption((opt) =>
-        opt.setName("movie").setDescription("Which proposed movie").setRequired(true).setAutocomplete(true),
-      ),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName("status")
-      .setDescription("Show proposals and live vote standings for a movie night.")
-      .addStringOption((opt) =>
-        opt.setName("event").setDescription("Which movie night").setRequired(true).setAutocomplete(true),
       ),
   )
   .addSubcommand((sub) =>
@@ -129,22 +99,6 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
       .map((event, index) => ({ name: eventLabel(event, index), value: event.id }))
       .filter((choice) => choice.name.toLowerCase().includes(query))
       .slice(0, 25);
-    await interaction.respond(choices);
-    return;
-  }
-
-  if (focused.name === "movie") {
-    const eventId = interaction.options.getString("event");
-    if (!eventId) {
-      await interaction.respond([]);
-      return;
-    }
-    const proposals = service.listProposals(eventId);
-    const query = focused.value.toLowerCase();
-    const choices = proposals
-      .filter((p) => p.title.toLowerCase().includes(query))
-      .slice(0, 25)
-      .map((p) => ({ name: p.title.slice(0, 100), value: p.id }));
     await interaction.respond(choices);
     return;
   }
@@ -227,19 +181,6 @@ function proposeReplyPayload(result: ServiceResult<MovieProposal>): { content?: 
   return { embeds: [embed] };
 }
 
-async function handlePropose(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
-  const eventId = interaction.options.getString("event", true);
-  const titleInput = interaction.options.getString("title", true);
-
-  await interaction.deferReply({ ephemeral: true });
-  const resolved = await resolveProposalInput(titleInput);
-  const result = service.proposeMovie({ eventId, userId: interaction.user.id, ...resolved });
-  if (result.ok) {
-    await refreshAnnouncementMessage(interaction.client, service, eventId, result.value.id);
-  }
-  await interaction.editReply(proposeReplyPayload(result));
-}
-
 /** A user clicked the "Propose a Movie" button under a movie night announcement — open the title modal. */
 export async function handleProposeButton(interaction: ButtonInteraction): Promise<void> {
   const eventId = parseProposeButtonId(interaction.customId);
@@ -261,46 +202,6 @@ export async function handleProposeModalSubmit(interaction: ModalSubmitInteracti
     await refreshAnnouncementMessage(interaction.client, service, eventId, result.value.id);
   }
   await interaction.editReply(proposeReplyPayload(result));
-}
-
-async function handleVote(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
-  const eventId = interaction.options.getString("event", true);
-  const proposalId = interaction.options.getString("movie", true);
-
-  await interaction.deferReply({ ephemeral: true });
-
-  const result = service.castVote({ eventId, userId: interaction.user.id, proposalId });
-  if (!result.ok) {
-    await interaction.editReply({ content: `❌ ${result.reason}` });
-    return;
-  }
-
-  await refreshAnnouncementMessage(interaction.client, service, eventId);
-
-  const { title, sourceUrl, posterUrl } = result.value.proposal;
-  const embed = new EmbedBuilder().setDescription(`🗳️ Voted for ${movieLink(title, sourceUrl)}!`).setColor(0x5865f2);
-  if (posterUrl) {
-    embed.setThumbnail(posterUrl);
-  }
-  await interaction.editReply({ embeds: [embed] });
-}
-
-async function handleStatus(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
-  const eventId = interaction.options.getString("event", true);
-  const status = service.getStatus(eventId);
-  if (!status) {
-    await interaction.reply({ content: "❌ That movie night event doesn't exist.", ephemeral: true });
-    return;
-  }
-
-  const { event, proposals, counts } = status;
-  const messageData = buildMovieNightMessageData(event, proposals, counts);
-
-  await interaction.reply({
-    embeds: buildMovieNightEmbeds(messageData),
-    components: event.status === "open" ? [buildProposeButtonRow(event.id)] : [],
-    ephemeral: true,
-  });
 }
 
 async function handleCancel(interaction: ChatInputCommandInteraction, service: MovieNightService): Promise<void> {
@@ -378,12 +279,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   switch (subcommand) {
     case "schedule":
       return handleSchedule(interaction, service);
-    case "propose":
-      return handlePropose(interaction, service);
-    case "vote":
-      return handleVote(interaction, service);
-    case "status":
-      return handleStatus(interaction, service);
     case "cancel":
       return handleCancel(interaction, service);
     case "config":

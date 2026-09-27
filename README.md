@@ -19,32 +19,30 @@ before the event starts.
    permission, it also creates a Discord scheduled event in the server's
    **Events** tab, so members see the day and time without leaving Discord's
    native UI.
-2. Members propose movies with `/movienight propose` (or the "🎬 Propose a
-   Movie" button on the status message) — the server admin controls how many
-   proposals each person may submit (`/movienight config`). Instead of typing
-   a title, they can paste a link to the movie (IMDb, Netflix, TMDB, Disney+,
-   JustWatch, ...); the bot reads that page's link-preview metadata (the same
-   `og:title`/`og:image` tags used for share previews on iMessage/WhatsApp/
-   Discord itself) to fill in the correct title and poster automatically. If
-   a link can't be read, the raw link is used as the title so proposing still
-   succeeds. The status message updates immediately to show the new proposal,
-   numbered with the keycap emoji (1️⃣, 2️⃣, ...) the bot reacts with —
-   a proposal's number is fixed for the event, even as movies get reordered
-   by vote count.
+2. Members propose movies with the "🎬 Propose a Movie" button on the status
+   message — the server admin controls how many proposals each person may
+   submit (`/movienight config`). Instead of typing a title, they can paste a
+   link to the movie (IMDb, Netflix, TMDB, Disney+, JustWatch, ...); the bot
+   reads that page's link-preview metadata (the same `og:title`/`og:image`
+   tags used for share previews on iMessage/WhatsApp/Discord itself) to fill
+   in the correct title and poster automatically. If a link can't be read,
+   the raw link is used as the title so proposing still succeeds. The status
+   message updates immediately to show the new proposal, numbered with the
+   keycap emoji (1️⃣, 2️⃣, ...) the bot reacts with — a proposal's number is
+   fixed for the event, even as movies get reordered by vote count.
 3. Members vote by reacting with a movie's number emoji on the status
-   message, or with `/movienight vote` (equivalent to reacting). Only one
-   reaction counts: pressing a different number moves your vote there and
-   removes your old reaction, and removing your reaction entirely retracts
-   your vote. The status message's vote counts update immediately either way.
+   message. Only one reaction counts: pressing a different number moves your
+   vote there and removes your old reaction, and removing your reaction
+   entirely retracts your vote. The status message's vote counts update
+   immediately either way — proposing and voting are reaction/button-only,
+   there's no slash-command equivalent.
 4. A configurable number of minutes before the event (also set via
    `/movienight config`), voting closes automatically and the bot announces
    the winner in the event's channel, and the status message flips to
    "closed" with final tallies and the winner marked. Ties are broken by a
    random raffle draw; if nobody voted, a movie is still picked at random
    from the proposals so the event never goes undecided.
-5. `/movienight status` shows the same information as an ephemeral (only you
-   can see it) reply, in case the pinned message has scrolled out of view;
-   `/movienight cancel` lets the organizer cancel an event they scheduled.
+5. `/movienight cancel` lets the organizer cancel an event they scheduled.
 
 ## Requirements
 
@@ -94,9 +92,6 @@ npm run dev
 | Command | Who | Description |
 |---|---|---|
 | `/movienight schedule date time [timezone] [channel]` | anyone | Schedules a movie night (`date` is `MM-DD`, current year assumed; `time` is when the movie starts). |
-| `/movienight propose event title` | anyone | Proposes a movie — `title` can be a movie title or a link to it (IMDb, Netflix, etc.). |
-| `/movienight vote event movie` | anyone | Casts (or moves) your vote — same effect as reacting with that movie's number on the status message. |
-| `/movienight status event` | anyone | Shows the current proposals and vote counts (ephemeral — the pinned message already stays current). |
 | `/movienight cancel event` | the event's creator | Cancels a movie night. |
 | `/movienight config [max-proposals] [close-before-minutes] [timezone]` | Manage Server permission | Views/changes per-server rules, including the default time zone used when `schedule` omits one. |
 
