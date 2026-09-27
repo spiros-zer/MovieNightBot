@@ -127,7 +127,10 @@ export function buildMovieNightMessageData(
   if (proposals.length === 0) {
     headerLines.push("", "_No movies proposed yet._");
   } else {
-    if (isOpen) headerLines.push("", "_React with a movie's number below to vote — pressing another number moves your vote._");
+    if (isOpen) {
+      headerLines.push("", "_React with a movie's number below to vote — pressing another number moves your vote._");
+      headerLines.push("_If nobody votes before voting closes, a movie is still picked at random so the night isn't left undecided._");
+    }
     if (overflow.length > 0) {
       const overflowList = overflow.map((p) => movieLink(p.title, p.sourceUrl)).join(", ");
       headerLines.push("", `_+${overflow.length} more: ${overflowList}_`);

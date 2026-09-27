@@ -60,4 +60,15 @@ export class ProposalRepository {
       .get(eventId, userId) as { count: number };
     return row.count;
   }
+
+  /** Every proposal a user has submitted, across all events — used to report/delete a user's data. */
+  listByUser(userId: string): MovieProposal[] {
+    const rows = this.db.prepare("SELECT * FROM proposals WHERE user_id = ?").all(userId) as unknown as ProposalRow[];
+    return rows.map(toDomain);
+  }
+
+  /** Deletes every proposal a user has submitted, across all events. Callers must delete dependent votes first (FK). */
+  deleteByUser(userId: string): void {
+    this.db.prepare("DELETE FROM proposals WHERE user_id = ?").run(userId);
+  }
 }

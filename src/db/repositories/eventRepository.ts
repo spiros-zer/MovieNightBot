@@ -81,6 +81,12 @@ export class EventRepository {
     return rows.map(toDomain);
   }
 
+  /** Events a user scheduled, across all guilds — used to report on a data-deletion request. */
+  listCreatedByUser(userId: string): MovieNightEvent[] {
+    const rows = this.db.prepare("SELECT * FROM events WHERE creator_id = ?").all(userId) as unknown as EventRow[];
+    return rows.map(toDomain);
+  }
+
   updateStatus(id: string, status: EventStatus, winningProposalId: string | null = null): void {
     this.db
       .prepare("UPDATE events SET status = ?, winning_proposal_id = ? WHERE id = ?")

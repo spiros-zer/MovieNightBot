@@ -10,6 +10,16 @@ import type { GuildConfig, MovieNightEvent, MovieProposal, Vote } from "../domai
 
 export type ServiceResult<T> = { ok: true; value: T } | { ok: false; reason: string };
 
+/** What a data-deletion (privacy) request actually removed, and any operationally-retained residue to report to the requester. */
+export interface ForgetUserResult {
+  deletedVoteCount: number;
+  deletedProposalCount: number;
+  /** Other users' votes removed as a side effect of deleting this user's proposals — a vote can't outlive the proposal it's for. */
+  collateralVoteCount: number;
+  /** Events this user scheduled, which keep their creator id — see `forgetUser`'s doc comment for why. */
+  retainedAsOrganizerOf: MovieNightEvent[];
+}
+
 export interface VotingClosedPayload {
   event: MovieNightEvent;
   proposals: MovieProposal[];
@@ -245,6 +255,33 @@ export class MovieNightService {
     this.eventRepo.updateStatus(event.id, "cancelled", null);
     this.scheduler.cancel(event.id);
     return { ok: true, value: { ...event, status: "cancelled", winningProposalId: null } };
+  }
+
+  /**
+   * Erases a user's own content — every proposal they submitted and every vote they cast, across
+   * all events — for a Privacy Policy deletion request. Deleting a proposal also removes any
+   * votes *other* users cast for it (a vote can't reference a proposal that no longer exists).
+   *
+   * Events the user scheduled are deliberately left alone: `creator_id` is operational data
+   * (needed to know who may `cancelEvent`, and already shown publicly on the event's own status
+   * message as "Scheduled by @user") rather than personal content like a proposal or vote, so
+   * erasing it would either break a still-running event for other participants or rewrite public
+   * history. Callers should report `retainedAsOrganizerOf` to the requester rather than silently
+   * dropping it.
+   */
+  forgetUser(userId: string): ForgetUserResult {
+    const deletedVoteCount = this.voteRepo.deleteByUser(userId);
+
+    const ownProposals = this.proposalRepo.listByUser(userId);
+    let collateralVoteCount = 0;
+    for (const proposal of ownProposals) {
+      collateralVoteCount += this.voteRepo.deleteByProposal(proposal.id);
+    }
+    this.proposalRepo.deleteByUser(userId);
+
+    const retainedAsOrganizerOf = this.eventRepo.listCreatedByUser(userId);
+
+    return { deletedVoteCount, deletedProposalCount: ownProposals.length, collateralVoteCount, retainedAsOrganizerOf };
   }
 
   /** Re-schedules vote-close jobs for events still open in storage; call once at startup. */

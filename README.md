@@ -68,10 +68,22 @@ Fill in `.env`:
   `./data/movie-night.sqlite`).
 
 Invite the bot to your server with the `applications.commands` and `bot`
-scopes, and the "Send Messages" / "Use Slash Commands" permissions. Also grant
-"Manage Events" if you want scheduled movie nights to show up in the server's
-Events tab (optional — the bot still works without it, just without that
-calendar entry).
+scopes, and these bot permissions:
+
+- **Send Messages** / **Use Slash Commands** — required; without these the
+  bot can't post the status message or register `/movienight` at all.
+- **Add Reactions** — required for voting: the bot reacts a proposal's number
+  emoji onto the status message for people to vote with.
+- **Manage Messages** — required for vote-*switching* to work correctly: when
+  someone presses a different number, the bot removes their old reaction via
+  `MessageReaction.users.remove()` for *that user*, which Discord only allows
+  with this permission. Without it, that removal fails silently (caught and
+  ignored, so voting doesn't break outright), but a stale reaction is left on
+  the message and the person now has two number reactions even though only
+  the newer one counts.
+- **Manage Events** (optional) — grant this if you want scheduled movie
+  nights to also show up in the server's **Events** tab. The bot still works
+  without it, just without that calendar entry.
 
 Register the slash commands, then start the bot:
 
@@ -102,6 +114,21 @@ npm test          # run the test suite once
 npm run test:watch
 npm run typecheck
 ```
+
+To fulfil a data-deletion request under the [Privacy Policy](PRIVACY_POLICY.md)
+(§5), stop the bot and run:
+
+```bash
+npm run forget-user -- <discord-user-id>
+```
+
+This deletes every proposal and vote that Discord user submitted, across all
+guilds this instance serves (deleting one of their proposals also removes
+any votes *other* users cast for it, since a vote can't outlive the proposal
+it's for). It leaves alone events they *scheduled*: the organizer id is
+operational data already shown publicly on the event's own status message,
+not personal content like a proposal or vote — the script reports which
+events, if any, are affected by that distinction.
 
 The codebase is layered so the interesting logic is unit-testable without
 Discord or a database:

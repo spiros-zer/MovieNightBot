@@ -36,6 +36,18 @@ export class VoteRepository {
     this.db.prepare("DELETE FROM votes WHERE event_id = ? AND user_id = ?").run(eventId, userId);
   }
 
+  /** Deletes every vote a user has cast, across all events. Returns how many rows were removed. */
+  deleteByUser(userId: string): number {
+    const result = this.db.prepare("DELETE FROM votes WHERE user_id = ?").run(userId);
+    return Number(result.changes);
+  }
+
+  /** Deletes every vote cast for a proposal — used when the proposal itself is deleted, since a vote can't outlive it. */
+  deleteByProposal(proposalId: string): number {
+    const result = this.db.prepare("DELETE FROM votes WHERE proposal_id = ?").run(proposalId);
+    return Number(result.changes);
+  }
+
   getByEventAndUser(eventId: string, userId: string): Vote | null {
     const row = this.db
       .prepare("SELECT * FROM votes WHERE event_id = ? AND user_id = ?")

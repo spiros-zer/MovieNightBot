@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-27
 
 These Terms of Service ("Terms") govern your use of Movie Night Bot (the "Bot"), a Discord application that helps servers schedule movie nights, collect movie proposals, and run voting. By adding the Bot to a Discord server, or by interacting with its commands, you agree to these Terms.
 
@@ -10,8 +10,8 @@ The Bot lets members of a Discord server:
 
 - Schedule a "movie night" event for a specific date and time.
 - Propose movies to watch, subject to a limit the server's administrators configure.
-- Vote for one proposed movie per event.
-- Automatically receive an announcement of the winning movie once voting closes.
+- Vote for one proposed movie per event, by reacting to the Bot's own status message.
+- Automatically receive an announcement of the winning movie once voting closes. If nobody voted, or the top proposals are tied, the winner is chosen at random from the proposals rather than leaving the event undecided — the Bot's status message says so while voting is still open.
 
 The Bot is provided free of charge for personal and community use within Discord.
 

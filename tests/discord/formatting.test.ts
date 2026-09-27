@@ -212,6 +212,22 @@ describe("buildMovieNightMessageData", () => {
     expect(result.movieEmbeds).toEqual([]);
   });
 
+  it("discloses to voters that a movie is picked at random if nobody votes", () => {
+    const event = baseEvent();
+    const p1 = proposal("p1", "The Matrix", "u1");
+    const result = buildMovieNightMessageData(event, [p1], new Map());
+
+    expect(result.header.description).toMatch(/picked at random/i);
+  });
+
+  it("omits the random-pick disclosure once voting has closed", () => {
+    const event = baseEvent({ status: "announced", winningProposalId: "p1" });
+    const p1 = proposal("p1", "The Matrix", "u1");
+    const result = buildMovieNightMessageData(event, [p1], new Map([["p1", 1]]));
+
+    expect(result.header.description).not.toMatch(/picked at random/i);
+  });
+
   it("renders one embed per proposal, sorted by votes, with poster and link", () => {
     const event = baseEvent();
     const p1 = proposal("p1", "The Matrix", "u1", "https://img.example.com/matrix.jpg", "https://www.netflix.com/title/1");

@@ -362,6 +362,62 @@ describe("cancelEvent", () => {
   });
 });
 
+describe("forgetUser", () => {
+  it("deletes the user's own proposals and votes but leaves other users' data intact", () => {
+    const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
+    if (!eventResult.ok) throw new Error("expected success");
+    const event = eventResult.value;
+
+    const mine = service.proposeMovie({ eventId: event.id, userId: "target-user", title: "My Movie" });
+    const theirs = service.proposeMovie({ eventId: event.id, userId: "other-user", title: "Their Movie" });
+    if (!mine.ok || !theirs.ok) throw new Error("expected success");
+
+    service.castVote({ eventId: event.id, userId: "target-user", proposalId: theirs.value.id });
+    service.castVote({ eventId: event.id, userId: "other-user", proposalId: theirs.value.id });
+
+    const result = service.forgetUser("target-user");
+
+    expect(result.deletedProposalCount).toBe(1);
+    expect(result.deletedVoteCount).toBe(1);
+    expect(result.collateralVoteCount).toBe(0);
+    expect(service.listProposals(event.id)).toEqual([theirs.value]);
+    expect(service.getStatus(event.id)?.counts.get(theirs.value.id)).toBe(1);
+  });
+
+  it("also removes other users' votes cast for a deleted proposal, since a vote can't outlive it", () => {
+    const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
+    if (!eventResult.ok) throw new Error("expected success");
+    const event = eventResult.value;
+
+    const mine = service.proposeMovie({ eventId: event.id, userId: "target-user", title: "My Movie" });
+    if (!mine.ok) throw new Error("expected success");
+
+    service.castVote({ eventId: event.id, userId: "other-voter-1", proposalId: mine.value.id });
+    service.castVote({ eventId: event.id, userId: "other-voter-2", proposalId: mine.value.id });
+
+    const result = service.forgetUser("target-user");
+
+    expect(result.deletedProposalCount).toBe(1);
+    expect(result.collateralVoteCount).toBe(2);
+    expect(service.listProposals(event.id)).toEqual([]);
+  });
+
+  it("reports events the user scheduled without deleting them (organizer id is operational, not personal content)", () => {
+    const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: "target-user", eventTime: EVENT_TIME });
+    if (!eventResult.ok) throw new Error("expected success");
+
+    const result = service.forgetUser("target-user");
+
+    expect(result.retainedAsOrganizerOf).toEqual([eventResult.value]);
+    expect(service.getEvent(eventResult.value.id)?.creatorId).toBe("target-user");
+  });
+
+  it("is a no-op that reports zeroes for a user with no data", () => {
+    const result = service.forgetUser("nobody");
+    expect(result).toEqual({ deletedVoteCount: 0, deletedProposalCount: 0, collateralVoteCount: 0, retainedAsOrganizerOf: [] });
+  });
+});
+
 describe("getStatus", () => {
   it("reports live vote counts without closing the event", () => {
     const eventResult = service.createEvent({ guildId: GUILD_ID, channelId: CHANNEL_ID, creatorId: CREATOR_ID, eventTime: EVENT_TIME });
