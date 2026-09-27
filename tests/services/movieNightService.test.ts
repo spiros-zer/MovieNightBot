@@ -223,6 +223,18 @@ describe("retractVote", () => {
     const retracted = service.retractVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
     expect(retracted).toBe(false);
   });
+
+  it("does nothing once voting has closed, leaving the tallied vote intact", () => {
+    const { event, proposal } = eventWithProposal();
+    service.castVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
+
+    scheduler.trigger(event.id);
+    expect(service.getEvent(event.id)?.status).toBe("announced");
+
+    const retracted = service.retractVote({ eventId: event.id, userId: "voter-1", proposalId: proposal.id });
+    expect(retracted).toBe(false);
+    expect(service.getStatus(event.id)?.counts.get(proposal.id)).toBe(1);
+  });
 });
 
 describe("automatic voting close", () => {

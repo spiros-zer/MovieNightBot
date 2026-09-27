@@ -219,9 +219,13 @@ export class MovieNightService {
   /**
    * Clears a user's vote, but only if it still points at `proposalId` — used when a vote reaction
    * is removed, so it can't retract a vote that was already moved elsewhere by a newer reaction.
-   * Returns whether anything was actually retracted.
+   * No-ops once voting is no longer open, so un-reacting after close can't rewrite an
+   * already-tallied result. Returns whether anything was actually retracted.
    */
   retractVote(params: { eventId: string; userId: string; proposalId: string }): boolean {
+    const event = this.eventRepo.getById(params.eventId);
+    if (!event || event.status !== "open") return false;
+
     const existingVote = this.voteRepo.getByEventAndUser(params.eventId, params.userId);
     if (!existingVote || existingVote.proposalId !== params.proposalId) return false;
     this.voteRepo.delete(params.eventId, params.userId);
